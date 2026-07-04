@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xd.smartworksite.task.mapper.TaskMapper">
+
+    <resultMap id="TaskResultMap" type="com.xd.smartworksite.task.domain.GenerateTask">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="taskType" column="task_type"/>
+        <result property="bizType" column="biz_type"/>
+        <result property="bizId" column="biz_id"/>
+        <result property="status" column="status" javaType="com.xd.smartworksite.task.domain.TaskStatus"/>
+        <result property="currentStage" column="current_stage" javaType="com.xd.smartworksite.task.domain.TaskStageCode"/>
+        <result property="retryCount" column="retry_count"/>
+        <result property="maxRetryCount" column="max_retry_count"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="finishedAt" column="finished_at"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <resultMap id="StageLogResultMap" type="com.xd.smartworksite.task.domain.TaskStageLog">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="stageCode" column="stage_code" javaType="com.xd.smartworksite.task.domain.TaskStageCode"/>
+        <result property="status" column="status" javaType="com.xd.smartworksite.task.domain.TaskStageStatus"/>
+        <result property="inputSummary" column="input_summary"/>
+        <result property="outputSummary" column="output_summary"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="finishedAt" column="finished_at"/>
+        <result property="costMs" column="cost_ms"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <sql id="TaskColumns">
+        id, project_id, task_type, biz_type, biz_id, status, current_stage,
+        retry_count, max_retry_count, error_message, started_at, finished_at, created_at
+    </sql>
+
+    <sql id="StageLogColumns">
+        id, project_id, task_id, stage_code, status, input_summary, output_summary,
+        error_message, started_at, finished_at, cost_ms, created_at
+    </sql>
+
+    <select id="selectTaskById" resultMap="TaskResultMap">
+        select <include refid="TaskColumns"/>
+        from generate_task
+        where id = #{taskId}
+          and deleted = 0
+    </select>
+
+    <update id="updateTaskStatus">
+        update generate_task
+        set status = #{nextStatus},
+            current_stage = #{currentStage},
+            error_message = #{errorMessage},
+            <if test="markStarted">
+                started_at = coalesce(started_at, now()),
+            </if>
+            <if test="markFinished">
+                finished_at = now(),
+            </if>
+            updated_at = now()
+        where id = #{taskId}
+          and status = #{currentStatus}
+          and deleted = 0
+    </update>
+
+    <update id="retryTask">
+        update generate_task
+        set status = #{nextStatus},
+            retry_count = retry_count + 1,
+            error_message = null,
+            finished_at = null,
+            updated_at = now()
+        where id = #{taskId}
+          and status = #{currentStatus}
+          and deleted = 0
+    </update>
+
+    <select id="selectStageLogsByTaskId" resultMap="StageLogResultMap">
+        select <include refid="StageLogColumns"/>
+        from task_stage_log
+        where task_id = #{taskId}
+          and deleted = 0
+        order by created_at asc, id asc
+    </select>
+
+    <insert id="insertStageLog" useGeneratedKeys="true" keyProperty="id">
+        insert into task_stage_log (
+            project_id, task_id, stage_code, status, input_summary, output_summary,
+            error_message, started_at, finished_at, cost_ms, created_at, updated_at
+        ) values (
+            #{projectId}, #{taskId}, #{stageCode}, #{status}, #{inputSummary}, #{outputSummary},
+            #{errorMessage}, #{startedAt}, #{finishedAt}, #{costMs}, now(), now()
+        )
+    </insert>
+</mapper>
