@@ -12,6 +12,8 @@ public interface TaskMapper {
 
     GenerateTask selectTaskById(@Param("taskId") Long taskId);
 
+    int insertTask(GenerateTask task);
+
     int updateTaskStatus(@Param("taskId") Long taskId,
                          @Param("currentStatus") String currentStatus,
                          @Param("nextStatus") String nextStatus,

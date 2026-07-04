@@ -50,6 +50,16 @@
           and deleted = 0
     </select>
 
+    <insert id="insertTask" useGeneratedKeys="true" keyProperty="id">
+        insert into generate_task (
+            project_id, task_type, biz_type, biz_id, status, current_stage,
+            retry_count, max_retry_count, error_message, created_at, updated_at
+        ) values (
+            #{projectId}, #{taskType}, #{bizType}, #{bizId}, #{status}, #{currentStage},
+            #{retryCount}, #{maxRetryCount}, #{errorMessage}, now(), now()
+        )
+    </insert>
+
     <update id="updateTaskStatus">
         update generate_task
         set status = #{nextStatus},

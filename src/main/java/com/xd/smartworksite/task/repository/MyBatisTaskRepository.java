@@ -25,12 +25,17 @@ public class MyBatisTaskRepository implements TaskRepository {
     }
 
     @Override
-    public boolean updateStatus(GenerateTask task, TaskStatus nextStatus, TaskStageCode nextStage, String errorMessage) {
+    public void create(GenerateTask task) {
+        taskMapper.insertTask(task);
+    }
+
+    @Override
+    public boolean updateStatus(GenerateTask task, TaskStatus expectedStatus, TaskStatus nextStatus, TaskStageCode nextStage, String errorMessage) {
         boolean markStarted = nextStatus == TaskStatus.RUNNING && task.getStartedAt() == null;
         boolean markFinished = nextStatus == TaskStatus.SUCCESS || nextStatus == TaskStatus.FAILED || nextStatus == TaskStatus.CANCELED;
         int updated = taskMapper.updateTaskStatus(
                 task.getId(),
-                task.getStatus().name(),
+                expectedStatus.name(),
                 nextStatus.name(),
                 nextStage == null ? null : nextStage.name(),
                 errorMessage,
@@ -41,8 +46,8 @@ public class MyBatisTaskRepository implements TaskRepository {
     }
 
     @Override
-    public boolean retry(GenerateTask task) {
-        int updated = taskMapper.retryTask(task.getId(), task.getStatus().name(), TaskStatus.RETRYING.name());
+    public boolean retry(GenerateTask task, TaskStatus expectedStatus) {
+        int updated = taskMapper.retryTask(task.getId(), expectedStatus.name(), TaskStatus.RETRYING.name());
         return updated == 1;
     }
 

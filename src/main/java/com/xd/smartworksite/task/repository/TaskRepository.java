@@ -12,9 +12,11 @@ public interface TaskRepository {
 
     Optional<GenerateTask> findTaskById(Long taskId);
 
-    boolean updateStatus(GenerateTask task, TaskStatus nextStatus, TaskStageCode nextStage, String errorMessage);
+    void create(GenerateTask task);
 
-    boolean retry(GenerateTask task);
+    boolean updateStatus(GenerateTask task, TaskStatus expectedStatus, TaskStatus nextStatus, TaskStageCode nextStage, String errorMessage);
+
+    boolean retry(GenerateTask task, TaskStatus expectedStatus);
 
     List<TaskStageLog> findStageLogsByTaskId(Long taskId);
 
