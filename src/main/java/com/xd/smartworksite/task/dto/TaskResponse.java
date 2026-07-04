@@ -6,6 +6,7 @@ public class TaskResponse {
 
     private Long taskId;
     private Long projectId;
+    private Long userId;
     private String taskType;
     private String bizType;
     private Long bizId;
@@ -32,6 +33,14 @@ public class TaskResponse {
 
     public void setProjectId(Long projectId) {
         this.projectId = projectId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 
     public String getTaskType() {

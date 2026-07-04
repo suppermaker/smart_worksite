@@ -42,6 +42,8 @@ public class TaskApplicationService implements TaskStageFacade {
     public TaskResponse createTask(TaskCreateRequest request) {
         GenerateTask task = new GenerateTask();
         task.setProjectId(request.getProjectId());
+        task.setCreatedBy(request.getUserId());
+        task.setUpdatedBy(request.getUserId());
         task.setTaskType(request.getTaskType());
         task.setBizType(request.getBizType());
         task.setBizId(request.getBizId());
@@ -74,7 +76,8 @@ public class TaskApplicationService implements TaskStageFacade {
         if (!taskRepository.retry(task, expectedStatus)) {
             throw new BusinessException(ErrorCode.CONFLICT, "Task status changed, retry rejected");
         }
-        enqueueTask(new TaskQueueMessage(task.getId(), task.getProjectId(), task.getTaskType()));
+        enqueueTask(new TaskQueueMessage(task.getId(), task.getProjectId(), task.getCreatedBy(), null,
+                task.getTaskType()));
         return getTask(projectId, taskId);
     }
 
@@ -177,6 +180,7 @@ public class TaskApplicationService implements TaskStageFacade {
         TaskResponse response = new TaskResponse();
         response.setTaskId(task.getId());
         response.setProjectId(task.getProjectId());
+        response.setUserId(task.getCreatedBy());
         response.setTaskType(task.getTaskType());
         response.setBizType(task.getBizType());
         response.setBizId(task.getBizId());

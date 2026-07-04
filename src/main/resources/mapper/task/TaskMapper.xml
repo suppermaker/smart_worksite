@@ -16,6 +16,8 @@
         <result property="startedAt" column="started_at"/>
         <result property="finishedAt" column="finished_at"/>
         <result property="createdAt" column="created_at"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="updatedBy" column="updated_by"/>
     </resultMap>
 
     <resultMap id="StageLogResultMap" type="com.xd.smartworksite.task.domain.TaskStageLog">
@@ -35,7 +37,8 @@
 
     <sql id="TaskColumns">
         id, project_id, task_type, biz_type, biz_id, status, current_stage,
-        retry_count, max_retry_count, error_message, started_at, finished_at, created_at
+        retry_count, max_retry_count, error_message, started_at, finished_at, created_at,
+        created_by, updated_by
     </sql>
 
     <sql id="StageLogColumns">
@@ -53,10 +56,10 @@
     <insert id="insertTask" useGeneratedKeys="true" keyProperty="id">
         insert into generate_task (
             project_id, task_type, biz_type, biz_id, status, current_stage,
-            retry_count, max_retry_count, error_message, created_at, updated_at
+            retry_count, max_retry_count, error_message, created_at, updated_at, created_by, updated_by
         ) values (
             #{projectId}, #{taskType}, #{bizType}, #{bizId}, #{status}, #{currentStage},
-            #{retryCount}, #{maxRetryCount}, #{errorMessage}, now(), now()
+            #{retryCount}, #{maxRetryCount}, #{errorMessage}, now(), now(), #{createdBy}, #{updatedBy}
         )
     </insert>
 
