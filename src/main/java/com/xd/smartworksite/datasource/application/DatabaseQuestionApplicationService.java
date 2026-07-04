@@ -16,6 +16,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class DatabaseQuestionApplicationService {
 
+    private static final String EXECUTION_STATUS_VALIDATED_NOT_EXECUTED = "VALIDATED_NOT_EXECUTED";
+    private static final String EXECUTION_BLOCKED_REASON =
+            "Datasource credential and whitelist contracts are not configured";
+
     private final DataSourceRepository dataSourceRepository;
     private final ReadOnlySqlValidator readOnlySqlValidator;
     private final DatabaseQueryExecutor databaseQueryExecutor;
@@ -55,7 +59,9 @@ public class DatabaseQuestionApplicationService {
         response.setPageNo(executionResult.pageNo());
         response.setPageSize(executionResult.pageSize());
         response.setCostMs(executionResult.costMs());
-        response.setResultSummary("SQL validated as read-only; execution awaits datasource credential and whitelist contracts");
+        response.setExecutionStatus(EXECUTION_STATUS_VALIDATED_NOT_EXECUTED);
+        response.setExecutionBlockedReason(EXECUTION_BLOCKED_REASON);
+        response.setResultSummary("SQL validated as read-only; execution not performed");
         response.setExternalCallSummary(summary(request, dataSource, safetyResult, executionResult.costMs()));
         return response;
     }
@@ -114,7 +120,7 @@ public class DatabaseQuestionApplicationService {
                 + ", pageNo=" + request.getPageNo()
                 + ", pageSize=" + request.getPageSize()
                 + ", timeoutMs=" + request.getTimeoutMs());
-        summary.setResponseSummary("status=VALIDATED, rows=0, execution=DRY_RUN");
+        summary.setResponseSummary("status=" + EXECUTION_STATUS_VALIDATED_NOT_EXECUTED + ", rows=0");
         summary.setStatus("SUCCESS");
         summary.setCostMs(costMs);
         return summary;

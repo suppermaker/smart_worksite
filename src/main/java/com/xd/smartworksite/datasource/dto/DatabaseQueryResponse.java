@@ -21,6 +21,8 @@ public class DatabaseQueryResponse {
     private Integer pageSize;
     private Long costMs;
     private String resultSummary;
+    private String executionStatus;
+    private String executionBlockedReason;
     private ExternalCallSummary externalCallSummary;
 
     public Long getDataSourceId() {
@@ -133,6 +135,22 @@ public class DatabaseQueryResponse {
 
     public void setResultSummary(String resultSummary) {
         this.resultSummary = resultSummary;
+    }
+
+    public String getExecutionStatus() {
+        return executionStatus;
+    }
+
+    public void setExecutionStatus(String executionStatus) {
+        this.executionStatus = executionStatus;
+    }
+
+    public String getExecutionBlockedReason() {
+        return executionBlockedReason;
+    }
+
+    public void setExecutionBlockedReason(String executionBlockedReason) {
+        this.executionBlockedReason = executionBlockedReason;
     }
 
     public ExternalCallSummary getExternalCallSummary() {
