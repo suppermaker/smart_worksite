@@ -50,6 +50,7 @@ public class TaskWorkerService {
     }
 
     public boolean execute(TaskQueueMessage message) {
+        validateMessage(message);
         String lockKey = RedisKeys.lock("task:" + message.getTaskId());
         String lockToken = redisLockService.tryLock(lockKey, LOCK_TTL);
         if (lockToken == null) {
@@ -91,6 +92,27 @@ public class TaskWorkerService {
             return objectMapper.readValue(payload, TaskQueueMessage.class);
         } catch (JsonProcessingException exception) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "Invalid task queue message");
+        }
+    }
+
+    private void validateMessage(TaskQueueMessage message) {
+        if (message == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Task queue message must not be null");
+        }
+        if (message.getTaskId() == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Task queue message task id must not be null");
+        }
+        if (message.getProjectId() == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Task queue message project id must not be null");
+        }
+        if (message.getTaskType() == null || message.getTaskType().isBlank()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Task queue message task type must not be blank");
+        }
+        if (message.getTaskType().length() > 64) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Task queue message task type must not exceed 64 characters");
+        }
+        if (message.getRequestId() != null && message.getRequestId().length() > 128) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Task queue message request id must not exceed 128 characters");
         }
     }
 
