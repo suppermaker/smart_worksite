@@ -7,6 +7,8 @@ public class DatabaseQueryResponse {
 
     private Long dataSourceId;
     private Long projectId;
+    private Long userId;
+    private String requestId;
     private String sqlSummary;
     private List<String> tables;
     private List<String> columns;
@@ -30,6 +32,22 @@ public class DatabaseQueryResponse {
 
     public void setProjectId(Long projectId) {
         this.projectId = projectId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
     }
 
     public String getSqlSummary() {

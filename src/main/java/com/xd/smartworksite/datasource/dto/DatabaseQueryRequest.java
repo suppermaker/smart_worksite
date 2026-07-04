@@ -11,6 +11,11 @@ public class DatabaseQueryRequest {
     @NotNull
     private Long projectId;
 
+    private Long userId;
+
+    @Size(max = 128)
+    private String requestId;
+
     @NotNull
     private Long dataSourceId;
 
@@ -39,6 +44,22 @@ public class DatabaseQueryRequest {
 
     public void setProjectId(Long projectId) {
         this.projectId = projectId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
     }
 
     public Long getDataSourceId() {

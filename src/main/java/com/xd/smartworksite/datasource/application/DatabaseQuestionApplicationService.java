@@ -42,6 +42,8 @@ public class DatabaseQuestionApplicationService {
         DatabaseQueryResponse response = new DatabaseQueryResponse();
         response.setDataSourceId(dataSource.getId());
         response.setProjectId(dataSource.getProjectId());
+        response.setUserId(request.getUserId());
+        response.setRequestId(request.getRequestId());
         response.setSqlSummary(SqlSummary.summarize(safetyResult.getNormalizedSql()));
         response.setTables(safetyResult.getTableNames());
         response.setColumns(executionResult.columns());
