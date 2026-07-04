@@ -29,6 +29,8 @@ public class QaMessageApplicationService {
                 request.getHistory(), request.getMaxContextMessages() == null ? 0 : request.getMaxContextMessages());
         RouteDecisionRequest routeRequest = new RouteDecisionRequest();
         routeRequest.setProjectId(request.getProjectId());
+        routeRequest.setUserId(request.getUserId());
+        routeRequest.setRequestId(request.getRequestId());
         routeRequest.setQuestion(request.getQuestion());
         routeRequest.setRequestedRouteMode(request.getRouteMode());
         routeRequest.setAllowedKnowledgeBaseIds(request.getKnowledgeBaseIds());
@@ -39,6 +41,8 @@ public class QaMessageApplicationService {
         QaMessageResponse response = new QaMessageResponse();
         response.setProjectId(request.getProjectId());
         response.setSessionId(sessionId);
+        response.setUserId(request.getUserId());
+        response.setRequestId(request.getRequestId());
         response.setContextSummary(contextSummary);
         response.setRouteDecision(routeDecision);
         if (routeDecision.isNeedClarification()) {

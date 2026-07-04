@@ -43,7 +43,7 @@ public class RouteDecisionApplicationService implements RouteDecisionFacade {
             case DATABASE -> decideDatabase(dataSourceIds);
             case MIXED -> decideMixed(knowledgeBaseIds, dataSourceIds);
         };
-        return RouteDecisionResponse.from(request.getProjectId(), decision);
+        return RouteDecisionResponse.from(request, decision);
     }
 
     private RouteDecision decideAuto(List<Long> knowledgeBaseIds, List<Long> dataSourceIds) {

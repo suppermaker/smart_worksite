@@ -7,6 +7,8 @@ public class QaMessageResponse {
 
     private Long projectId;
     private Long sessionId;
+    private Long userId;
+    private String requestId;
     private QaReplyStatus status;
     private String answer;
     private String pendingReason;
@@ -28,6 +30,22 @@ public class QaMessageResponse {
 
     public void setSessionId(Long sessionId) {
         this.sessionId = sessionId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
     }
 
     public QaReplyStatus getStatus() {

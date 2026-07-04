@@ -16,6 +16,11 @@ public class QaMessageRequest {
     @NotNull
     private Long projectId;
 
+    private Long userId;
+
+    @Size(max = 128)
+    private String requestId;
+
     @NotBlank
     @Size(max = 1000)
     private String question;
@@ -43,6 +48,22 @@ public class QaMessageRequest {
 
     public void setProjectId(Long projectId) {
         this.projectId = projectId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
     }
 
     public String getQuestion() {

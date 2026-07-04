@@ -8,6 +8,8 @@ import java.util.List;
 public class RouteDecisionResponse {
 
     private Long projectId;
+    private Long userId;
+    private String requestId;
     private RouteMode routeMode;
     private List<Long> selectedKnowledgeBaseIds;
     private List<Long> selectedDataSourceIds;
@@ -16,9 +18,11 @@ public class RouteDecisionResponse {
     private String rationale;
     private Double deterministicScore;
 
-    public static RouteDecisionResponse from(Long projectId, RouteDecision decision) {
+    public static RouteDecisionResponse from(RouteDecisionRequest request, RouteDecision decision) {
         RouteDecisionResponse response = new RouteDecisionResponse();
-        response.setProjectId(projectId);
+        response.setProjectId(request.getProjectId());
+        response.setUserId(request.getUserId());
+        response.setRequestId(request.getRequestId());
         response.setRouteMode(decision.getRouteMode());
         response.setSelectedKnowledgeBaseIds(decision.getSelectedKnowledgeBaseIds());
         response.setSelectedDataSourceIds(decision.getSelectedDataSourceIds());
@@ -35,6 +39,22 @@ public class RouteDecisionResponse {
 
     public void setProjectId(Long projectId) {
         this.projectId = projectId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
     }
 
     public RouteMode getRouteMode() {
