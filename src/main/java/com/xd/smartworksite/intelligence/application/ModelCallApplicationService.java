@@ -6,6 +6,7 @@ import com.xd.smartworksite.audit.dto.ExternalCallSummary;
 import com.xd.smartworksite.intelligence.domain.ModelCallStatus;
 import com.xd.smartworksite.intelligence.dto.ModelCallRequest;
 import com.xd.smartworksite.intelligence.dto.ModelCallResponse;
+import com.xd.smartworksite.intelligence.dto.ModelMessageRequest;
 import com.xd.smartworksite.intelligence.infra.ModelProviderClient;
 import org.springframework.stereotype.Service;
 
@@ -23,7 +24,7 @@ public class ModelCallApplicationService {
     }
 
     public ModelCallResponse call(ModelCallRequest request) {
-        validateMessages(request);
+        validateRequest(request);
         long start = System.nanoTime();
         try {
             ModelCallResponse response = modelProviderClient.call(request);
@@ -56,18 +57,51 @@ public class ModelCallApplicationService {
         response.setRouteMode(request.getRouteMode());
     }
 
-    private void validateMessages(ModelCallRequest request) {
+    private void validateRequest(ModelCallRequest request) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Model call request must not be null");
+        }
+        if (request.getProjectId() == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Project id must not be null");
+        }
+        requireMaxLength(request.getRequestId(), 128, "Request id must not exceed 128 characters");
+        requireMaxLength(request.getModelName(), 128, "Model name must not exceed 128 characters");
         if (request.getRouteMode() == null) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "Model route mode must not be empty");
         }
         if (request.getMessages() == null || request.getMessages().isEmpty()) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "Model messages must not be empty");
         }
-        request.getMessages().forEach(message -> {
-            if (message.getRole() == null || !ALLOWED_ROLES.contains(message.getRole())) {
-                throw new BusinessException(ErrorCode.PARAM_ERROR, "Model message role is not supported");
-            }
-        });
+        if (request.getMessages().size() > 50) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Model message count must not exceed 50");
+        }
+        request.getMessages().forEach(this::validateMessage);
+        if (request.getParameters() != null && request.getParameters().size() > 20) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Model parameter count must not exceed 20");
+        }
+        if (request.getTimeoutMs() == null || request.getTimeoutMs() < 100 || request.getTimeoutMs() > 60000) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Model timeoutMs must be between 100 and 60000");
+        }
+    }
+
+    private void validateMessage(ModelMessageRequest message) {
+        if (message == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Model message must not be null");
+        }
+        if (message.getRole() == null || !ALLOWED_ROLES.contains(message.getRole())) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Model message role is not supported");
+        }
+        if (message.getContent() == null || message.getContent().isBlank()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Model message content must not be blank");
+        }
+        requireMaxLength(message.getRole(), 32, "Model message role must not exceed 32 characters");
+        requireMaxLength(message.getContent(), 4000, "Model message content must not exceed 4000 characters");
+    }
+
+    private void requireMaxLength(String value, int maxLength, String message) {
+        if (value != null && value.length() > maxLength) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, message);
+        }
     }
 
     private ExternalCallSummary summary(ModelCallRequest request, ModelCallStatus status, String errorMessage,
