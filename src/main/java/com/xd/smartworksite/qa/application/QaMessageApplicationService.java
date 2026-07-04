@@ -1,12 +1,17 @@
 package com.xd.smartworksite.qa.application;
 
+import com.xd.smartworksite.common.exception.BusinessException;
+import com.xd.smartworksite.common.result.ErrorCode;
 import com.xd.smartworksite.intelligence.dto.RouteDecisionRequest;
 import com.xd.smartworksite.intelligence.dto.RouteDecisionResponse;
 import com.xd.smartworksite.intelligence.facade.RouteDecisionFacade;
 import com.xd.smartworksite.qa.domain.QaReplyStatus;
+import com.xd.smartworksite.qa.dto.QaHistoryMessageRequest;
 import com.xd.smartworksite.qa.dto.QaMessageRequest;
 import com.xd.smartworksite.qa.dto.QaMessageResponse;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 public class QaMessageApplicationService {
@@ -25,6 +30,7 @@ public class QaMessageApplicationService {
     }
 
     public QaMessageResponse answer(Long sessionId, QaMessageRequest request) {
+        validateRequest(sessionId, request);
         String contextSummary = conversationContextAssembler.assemble(
                 request.getHistory(), request.getMaxContextMessages() == null ? 0 : request.getMaxContextMessages());
         RouteDecisionRequest routeRequest = new RouteDecisionRequest();
@@ -53,5 +59,76 @@ public class QaMessageApplicationService {
         response.setStatus(QaReplyStatus.ROUTE_DECIDED);
         response.setPendingReason("Answer generation awaits selected capability adapters");
         return response;
+    }
+
+    private void validateRequest(Long sessionId, QaMessageRequest request) {
+        if (sessionId == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "QA session id must not be null");
+        }
+        if (request == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "QA message request must not be null");
+        }
+        if (request.getProjectId() == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "Project id must not be null");
+        }
+        requireText(request.getQuestion(), "QA question must not be blank");
+        requireMaxLength(request.getQuestion(), 1000, "QA question must not exceed 1000 characters");
+        requireMaxLength(request.getRequestId(), 128, "Request id must not exceed 128 characters");
+        if (request.getRouteMode() == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "QA route mode must not be null");
+        }
+        validateIdList(request.getKnowledgeBaseIds(), 50, "Knowledge base id");
+        validateIdList(request.getDataSourceIds(), 50, "Data source id");
+        if (request.getMaxContextMessages() == null
+                || request.getMaxContextMessages() < 0
+                || request.getMaxContextMessages() > 20) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "QA maxContextMessages must be between 0 and 20");
+        }
+        validateHistory(request.getHistory());
+    }
+
+    private void validateIdList(List<Long> ids, int maxSize, String fieldName) {
+        if (ids == null) {
+            return;
+        }
+        if (ids.size() > maxSize) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, fieldName + " count must not exceed " + maxSize);
+        }
+        for (Long id : ids) {
+            if (id == null) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, fieldName + " must not be null");
+            }
+        }
+    }
+
+    private void validateHistory(List<QaHistoryMessageRequest> history) {
+        if (history == null) {
+            return;
+        }
+        if (history.size() > 20) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "QA history count must not exceed 20");
+        }
+        for (QaHistoryMessageRequest message : history) {
+            if (message == null) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "QA history message must not be null");
+            }
+            if (message.getRole() == null) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "QA history role must not be null");
+            }
+            requireText(message.getContent(), "QA history content must not be blank");
+            requireMaxLength(message.getContent(), 1000, "QA history content must not exceed 1000 characters");
+        }
+    }
+
+    private void requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, message);
+        }
+    }
+
+    private void requireMaxLength(String value, int maxLength, String message) {
+        if (value != null && value.length() > maxLength) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, message);
+        }
     }
 }
