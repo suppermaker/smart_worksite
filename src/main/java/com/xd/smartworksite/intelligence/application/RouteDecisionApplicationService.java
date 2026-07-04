@@ -2,11 +2,13 @@ package com.xd.smartworksite.intelligence.application;
 
 import com.xd.smartworksite.common.exception.BusinessException;
 import com.xd.smartworksite.common.result.ErrorCode;
+import com.xd.smartworksite.datasource.facade.DataSourceScopeFacade;
 import com.xd.smartworksite.intelligence.domain.RouteDecision;
 import com.xd.smartworksite.intelligence.domain.RouteMode;
 import com.xd.smartworksite.intelligence.dto.RouteDecisionRequest;
 import com.xd.smartworksite.intelligence.dto.RouteDecisionResponse;
 import com.xd.smartworksite.intelligence.facade.RouteDecisionFacade;
+import com.xd.smartworksite.knowledge.facade.KnowledgeScopeFacade;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashSet;
@@ -16,11 +18,22 @@ import java.util.stream.Collectors;
 @Service
 public class RouteDecisionApplicationService implements RouteDecisionFacade {
 
+    private final KnowledgeScopeFacade knowledgeScopeFacade;
+    private final DataSourceScopeFacade dataSourceScopeFacade;
+
+    public RouteDecisionApplicationService(KnowledgeScopeFacade knowledgeScopeFacade,
+                                           DataSourceScopeFacade dataSourceScopeFacade) {
+        this.knowledgeScopeFacade = knowledgeScopeFacade;
+        this.dataSourceScopeFacade = dataSourceScopeFacade;
+    }
+
     @Override
     public RouteDecisionResponse decide(RouteDecisionRequest request) {
         RouteMode requestedMode = request.getRequestedRouteMode() == null ? RouteMode.AUTO : request.getRequestedRouteMode();
-        List<Long> knowledgeBaseIds = normalizeIds(request.getAllowedKnowledgeBaseIds(), "Knowledge base id");
-        List<Long> dataSourceIds = normalizeIds(request.getAllowedDataSourceIds(), "Data source id");
+        List<Long> knowledgeBaseIds = knowledgeScopeFacade.validateEnabledKnowledgeBases(
+                request.getProjectId(), normalizeIds(request.getAllowedKnowledgeBaseIds(), "Knowledge base id"));
+        List<Long> dataSourceIds = dataSourceScopeFacade.validateEnabledDataSources(
+                request.getProjectId(), normalizeIds(request.getAllowedDataSourceIds(), "Data source id"));
 
         RouteDecision decision = switch (requestedMode) {
             case AUTO -> decideAuto(knowledgeBaseIds, dataSourceIds);
