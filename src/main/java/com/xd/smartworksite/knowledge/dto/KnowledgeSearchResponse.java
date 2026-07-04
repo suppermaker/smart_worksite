@@ -1,5 +1,7 @@
 package com.xd.smartworksite.knowledge.dto;
 
+import com.xd.smartworksite.audit.dto.ExternalCallSummary;
+
 import java.util.List;
 
 public class KnowledgeSearchResponse {
@@ -12,6 +14,7 @@ public class KnowledgeSearchResponse {
     private List<KnowledgeSnippetResponse> snippets;
     private Long costMs;
     private String resultSummary;
+    private ExternalCallSummary externalCallSummary;
 
     public Long getProjectId() {
         return projectId;
@@ -75,5 +78,13 @@ public class KnowledgeSearchResponse {
 
     public void setResultSummary(String resultSummary) {
         this.resultSummary = resultSummary;
+    }
+
+    public ExternalCallSummary getExternalCallSummary() {
+        return externalCallSummary;
+    }
+
+    public void setExternalCallSummary(ExternalCallSummary externalCallSummary) {
+        this.externalCallSummary = externalCallSummary;
     }
 }

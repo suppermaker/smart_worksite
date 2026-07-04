@@ -2,7 +2,7 @@ package com.xd.smartworksite.intelligence.application;
 
 import com.xd.smartworksite.common.exception.BusinessException;
 import com.xd.smartworksite.common.result.ErrorCode;
-import com.xd.smartworksite.intelligence.domain.ExternalCallSummary;
+import com.xd.smartworksite.audit.dto.ExternalCallSummary;
 import com.xd.smartworksite.intelligence.domain.ModelCallStatus;
 import com.xd.smartworksite.intelligence.dto.ModelCallRequest;
 import com.xd.smartworksite.intelligence.dto.ModelCallResponse;

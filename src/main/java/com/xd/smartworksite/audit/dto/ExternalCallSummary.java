@@ -1,4 +1,4 @@
-package com.xd.smartworksite.intelligence.domain;
+package com.xd.smartworksite.audit.dto;
 
 public class ExternalCallSummary {
 

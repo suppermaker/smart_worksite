@@ -1,5 +1,7 @@
 package com.xd.smartworksite.datasource.dto;
 
+import com.xd.smartworksite.audit.dto.ExternalCallSummary;
+
 import java.util.List;
 import java.util.Map;
 
@@ -17,6 +19,7 @@ public class DatabaseQueryResponse {
     private Integer pageSize;
     private Long costMs;
     private String resultSummary;
+    private ExternalCallSummary externalCallSummary;
 
     public Long getDataSourceId() {
         return dataSourceId;
@@ -112,5 +115,13 @@ public class DatabaseQueryResponse {
 
     public void setResultSummary(String resultSummary) {
         this.resultSummary = resultSummary;
+    }
+
+    public ExternalCallSummary getExternalCallSummary() {
+        return externalCallSummary;
+    }
+
+    public void setExternalCallSummary(ExternalCallSummary externalCallSummary) {
+        this.externalCallSummary = externalCallSummary;
     }
 }

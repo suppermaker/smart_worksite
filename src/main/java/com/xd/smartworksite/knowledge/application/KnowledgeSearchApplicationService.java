@@ -2,6 +2,7 @@ package com.xd.smartworksite.knowledge.application;
 
 import com.xd.smartworksite.common.exception.BusinessException;
 import com.xd.smartworksite.common.result.ErrorCode;
+import com.xd.smartworksite.audit.dto.ExternalCallSummary;
 import com.xd.smartworksite.knowledge.domain.KnowledgeBase;
 import com.xd.smartworksite.knowledge.dto.KnowledgeSearchRequest;
 import com.xd.smartworksite.knowledge.dto.KnowledgeSearchResponse;
@@ -34,7 +35,32 @@ public class KnowledgeSearchApplicationService implements KnowledgeSearchFacade 
         response.setProjectId(request.getProjectId());
         response.setUserId(request.getUserId());
         response.setRequestId(request.getRequestId());
+        if (response.getExternalCallSummary() == null) {
+            response.setExternalCallSummary(summary(request, validatedKnowledgeBaseIds, response));
+        }
         return response;
+    }
+
+    private ExternalCallSummary summary(KnowledgeSearchRequest request, List<Long> validatedKnowledgeBaseIds,
+                                        KnowledgeSearchResponse response) {
+        ExternalCallSummary summary = new ExternalCallSummary();
+        summary.setProjectId(request.getProjectId());
+        summary.setUserId(request.getUserId());
+        summary.setServiceName("knowledge-retrieval");
+        summary.setCallType("KNOWLEDGE_SEARCH");
+        summary.setRequestId(request.getRequestId());
+        summary.setRequestSummary("knowledgeBaseCount=" + validatedKnowledgeBaseIds.size()
+                + ", topK=" + request.getTopK()
+                + ", domain=" + nullSafe(request.getDomain()));
+        int snippetCount = response.getSnippets() == null ? 0 : response.getSnippets().size();
+        summary.setResponseSummary("status=SUCCESS, snippets=" + snippetCount);
+        summary.setStatus("SUCCESS");
+        summary.setCostMs(response.getCostMs());
+        return summary;
+    }
+
+    private String nullSafe(String value) {
+        return value == null ? "" : value;
     }
 
     private List<Long> resolveKnowledgeBaseIds(KnowledgeSearchRequest request) {

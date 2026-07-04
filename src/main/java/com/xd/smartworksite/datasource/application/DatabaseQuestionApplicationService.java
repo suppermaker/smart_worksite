@@ -2,6 +2,7 @@ package com.xd.smartworksite.datasource.application;
 
 import com.xd.smartworksite.common.exception.BusinessException;
 import com.xd.smartworksite.common.result.ErrorCode;
+import com.xd.smartworksite.audit.dto.ExternalCallSummary;
 import com.xd.smartworksite.datasource.domain.BusinessDataSource;
 import com.xd.smartworksite.datasource.domain.SqlSafetyResult;
 import com.xd.smartworksite.datasource.dto.DatabaseQueryRequest;
@@ -52,6 +53,26 @@ public class DatabaseQuestionApplicationService {
         response.setPageSize(executionResult.pageSize());
         response.setCostMs(executionResult.costMs());
         response.setResultSummary("SQL validated as read-only; execution awaits datasource credential and whitelist contracts");
+        response.setExternalCallSummary(summary(request, dataSource, safetyResult, executionResult.costMs()));
         return response;
+    }
+
+    private ExternalCallSummary summary(DatabaseQueryRequest request, BusinessDataSource dataSource,
+                                        SqlSafetyResult safetyResult, Long costMs) {
+        ExternalCallSummary summary = new ExternalCallSummary();
+        summary.setProjectId(dataSource.getProjectId());
+        summary.setUserId(request.getUserId());
+        summary.setServiceName("business-datasource");
+        summary.setCallType("DATABASE_QUERY");
+        summary.setRequestId(request.getRequestId());
+        summary.setRequestSummary("dataSourceId=" + dataSource.getId()
+                + ", tables=" + safetyResult.getTableNames().size()
+                + ", pageNo=" + request.getPageNo()
+                + ", pageSize=" + request.getPageSize()
+                + ", timeoutMs=" + request.getTimeoutMs());
+        summary.setResponseSummary("status=VALIDATED, rows=0, execution=DRY_RUN");
+        summary.setStatus("SUCCESS");
+        summary.setCostMs(costMs);
+        return summary;
     }
 }

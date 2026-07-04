@@ -1,6 +1,6 @@
 package com.xd.smartworksite.intelligence.dto;
 
-import com.xd.smartworksite.intelligence.domain.ExternalCallSummary;
+import com.xd.smartworksite.audit.dto.ExternalCallSummary;
 import com.xd.smartworksite.intelligence.domain.ModelCallStatus;
 import com.xd.smartworksite.intelligence.domain.RouteMode;
 
