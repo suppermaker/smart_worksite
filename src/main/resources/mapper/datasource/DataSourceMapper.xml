@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xd.smartworksite.datasource.mapper.DataSourceMapper">
+
+    <resultMap id="DataSourceResultMap" type="com.xd.smartworksite.datasource.domain.BusinessDataSource">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="name" column="name"/>
+        <result property="dbType" column="db_type" javaType="com.xd.smartworksite.datasource.domain.DatabaseType"/>
+        <result property="jdbcUrl" column="jdbc_url"/>
+        <result property="username" column="username"/>
+        <result property="passwordCipher" column="password_cipher"/>
+        <result property="status" column="status" javaType="com.xd.smartworksite.datasource.domain.DataSourceStatus"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="DataSourceResultMap">
+        select id, project_id, name, db_type, jdbc_url, username, password_cipher, status
+        from data_source
+        where id = #{dataSourceId}
+          and deleted = 0
+    </select>
+</mapper>

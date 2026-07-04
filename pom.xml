@@ -25,6 +25,7 @@
         <jacoco.version>0.8.12</jacoco.version>
         <maven-surefire.version>3.5.2</maven-surefire.version>
         <maven-failsafe.version>3.5.2</maven-failsafe.version>
+        <jsqlparser.version>4.9</jsqlparser.version>
     </properties>
 
     <dependencies>
@@ -71,6 +72,11 @@
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+            <version>${jsqlparser.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
