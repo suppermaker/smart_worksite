@@ -72,7 +72,7 @@ public class TaskWorkerService {
                 return false;
             }
             GenerateTask runningTask = taskApplicationService.loadTaskForWorker(task.getId());
-            handler.get().handle(new TaskExecutionContext(runningTask));
+            handler.get().handle(new TaskExecutionContext(runningTask, message));
             taskApplicationService.markSuccess(runningTask);
             return true;
         } catch (RuntimeException exception) {

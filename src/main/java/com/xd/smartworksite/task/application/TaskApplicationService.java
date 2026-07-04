@@ -50,7 +50,7 @@ public class TaskApplicationService implements TaskStageFacade {
         task.setRetryCount(0);
         task.setMaxRetryCount(request.getMaxRetryCount() == null ? 3 : request.getMaxRetryCount());
         taskRepository.create(task);
-        enqueueCreatedTask(task);
+        enqueueCreatedTask(task, request);
         return getTask(task.getProjectId(), task.getId());
     }
 
@@ -142,13 +142,14 @@ public class TaskApplicationService implements TaskStageFacade {
         return loadTask(taskId);
     }
 
-    private void enqueueCreatedTask(GenerateTask task) {
+    private void enqueueCreatedTask(GenerateTask task, TaskCreateRequest request) {
         TaskStatus expectedStatus = task.getStatus();
         task.transitionTo(TaskStatus.QUEUED);
         if (!taskRepository.updateStatus(task, expectedStatus, TaskStatus.QUEUED, task.getCurrentStage(), null)) {
             throw new BusinessException(ErrorCode.CONFLICT, "Task status changed, queue rejected");
         }
-        enqueueTask(new TaskQueueMessage(task.getId(), task.getProjectId(), task.getTaskType()));
+        enqueueTask(new TaskQueueMessage(task.getId(), task.getProjectId(), request.getUserId(),
+                request.getRequestId(), task.getTaskType()));
     }
 
     private void enqueueTask(TaskQueueMessage message) {
