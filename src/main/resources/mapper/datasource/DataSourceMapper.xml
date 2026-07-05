@@ -11,10 +11,11 @@
         <result property="username" column="username"/>
         <result property="passwordCipher" column="password_cipher"/>
         <result property="status" column="status" javaType="com.xd.smartworksite.datasource.domain.DataSourceStatus"/>
+        <result property="tableWhitelistJson" column="table_whitelist_json"/>
     </resultMap>
 
     <select id="selectById" resultMap="DataSourceResultMap">
-        select id, project_id, name, db_type, jdbc_url, username, password_cipher, status
+        select id, project_id, name, db_type, jdbc_url, username, password_cipher, status, table_whitelist_json
         from data_source
         where id = #{dataSourceId}
           and deleted = 0

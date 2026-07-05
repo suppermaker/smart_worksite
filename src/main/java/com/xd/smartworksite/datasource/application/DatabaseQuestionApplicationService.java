@@ -1,5 +1,8 @@
 package com.xd.smartworksite.datasource.application;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xd.smartworksite.common.exception.BusinessException;
 import com.xd.smartworksite.common.result.ErrorCode;
 import com.xd.smartworksite.audit.dto.ExternalCallSummary;
@@ -13,23 +16,33 @@ import com.xd.smartworksite.datasource.infra.SqlSummary;
 import com.xd.smartworksite.datasource.repository.DataSourceRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
 @Service
 public class DatabaseQuestionApplicationService {
 
     private static final String EXECUTION_STATUS_VALIDATED_NOT_EXECUTED = "VALIDATED_NOT_EXECUTED";
     private static final String EXECUTION_BLOCKED_REASON =
-            "Datasource credential and whitelist contracts are not configured";
+            "Datasource credential and field whitelist contracts are not configured";
+    private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
+    };
 
     private final DataSourceRepository dataSourceRepository;
     private final ReadOnlySqlValidator readOnlySqlValidator;
     private final DatabaseQueryExecutor databaseQueryExecutor;
+    private final ObjectMapper objectMapper;
 
     public DatabaseQuestionApplicationService(DataSourceRepository dataSourceRepository,
                                               ReadOnlySqlValidator readOnlySqlValidator,
-                                              DatabaseQueryExecutor databaseQueryExecutor) {
+                                              DatabaseQueryExecutor databaseQueryExecutor,
+                                              ObjectMapper objectMapper) {
         this.dataSourceRepository = dataSourceRepository;
         this.readOnlySqlValidator = readOnlySqlValidator;
         this.databaseQueryExecutor = databaseQueryExecutor;
+        this.objectMapper = objectMapper;
     }
 
     public DatabaseQueryResponse query(DatabaseQueryRequest request) {
@@ -43,6 +56,7 @@ public class DatabaseQuestionApplicationService {
             throw new BusinessException(ErrorCode.CONFLICT, "Data source is disabled");
         }
         SqlSafetyResult safetyResult = readOnlySqlValidator.validate(request.getSql());
+        validateTableWhitelist(dataSource, safetyResult);
         DatabaseQueryExecutor.QueryExecutionResult executionResult = databaseQueryExecutor.dryRun(
                 request.getPageNo(), request.getPageSize());
         validateDryRunResult(executionResult, request);
@@ -90,6 +104,58 @@ public class DatabaseQuestionApplicationService {
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
                     "Database dry-run pagination must match request");
         }
+    }
+
+    private void validateTableWhitelist(BusinessDataSource dataSource, SqlSafetyResult safetyResult) {
+        Set<String> allowedTables = parseTableWhitelist(dataSource.getTableWhitelistJson());
+        for (String tableName : safetyResult.getTableNames()) {
+            if (!allowedTables.contains(tableName)) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "SQL table is outside data source whitelist");
+            }
+        }
+    }
+
+    private Set<String> parseTableWhitelist(String tableWhitelistJson) {
+        if (tableWhitelistJson == null || tableWhitelistJson.isBlank()) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Data source table whitelist is not configured");
+        }
+        List<String> tableNames;
+        try {
+            tableNames = objectMapper.readValue(tableWhitelistJson, STRING_LIST);
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Data source table whitelist is invalid");
+        }
+        if (tableNames == null || tableNames.isEmpty()) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Data source table whitelist must not be empty");
+        }
+        Set<String> normalizedTables = new LinkedHashSet<>();
+        for (String tableName : tableNames) {
+            String normalized = normalizeTableName(tableName);
+            if (normalized.isBlank()) {
+                throw new BusinessException(ErrorCode.CONFLICT, "Data source table whitelist contains blank table name");
+            }
+            if (normalized.length() > 128) {
+                throw new BusinessException(ErrorCode.CONFLICT, "Data source table whitelist table name is too long");
+            }
+            normalizedTables.add(normalized);
+        }
+        if (normalizedTables.isEmpty()) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Data source table whitelist must not be empty");
+        }
+        return normalizedTables;
+    }
+
+    private String normalizeTableName(String tableName) {
+        String value = tableName == null ? "" : tableName.trim();
+        int lastDot = value.lastIndexOf('.');
+        if (lastDot >= 0) {
+            value = value.substring(lastDot + 1);
+        }
+        if ((value.startsWith("`") && value.endsWith("`"))
+                || (value.startsWith("\"") && value.endsWith("\""))) {
+            value = value.substring(1, value.length() - 1);
+        }
+        return value.toLowerCase(Locale.ROOT);
     }
 
     private void validateRequest(DatabaseQueryRequest request) {
