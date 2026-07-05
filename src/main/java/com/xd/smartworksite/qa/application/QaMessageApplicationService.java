@@ -2,6 +2,9 @@ package com.xd.smartworksite.qa.application;
 
 import com.xd.smartworksite.common.exception.BusinessException;
 import com.xd.smartworksite.common.result.ErrorCode;
+import com.xd.smartworksite.datasource.application.DatabaseQuestionApplicationService;
+import com.xd.smartworksite.datasource.dto.DatabaseQueryRequest;
+import com.xd.smartworksite.datasource.dto.DatabaseQueryResponse;
 import com.xd.smartworksite.intelligence.application.ModelCallApplicationService;
 import com.xd.smartworksite.intelligence.domain.ModelCallStatus;
 import com.xd.smartworksite.intelligence.domain.RouteMode;
@@ -28,28 +31,36 @@ public class QaMessageApplicationService {
     private final RouteDecisionFacade routeDecisionFacade;
     private final KnowledgeSearchFacade knowledgeSearchFacade;
     private final ModelCallApplicationService modelCallApplicationService;
+    private final DatabaseQuestionApplicationService databaseQuestionApplicationService;
     private final ConversationContextAssembler conversationContextAssembler;
     private static final int MAX_CONTEXT_SUMMARY_LENGTH = 2000;
     private static final int KNOWLEDGE_TOP_K = 5;
     private static final int MODEL_TIMEOUT_MS = 10000;
+    private static final int DATABASE_PAGE_NO = 1;
+    private static final int DATABASE_PAGE_SIZE = 50;
+    private static final int DATABASE_TIMEOUT_MS = 5000;
+    private static final String DATABASE_EXECUTION_STATUS_VALIDATED_NOT_EXECUTED = "VALIDATED_NOT_EXECUTED";
     private static final String MODEL_SYSTEM_PROMPT = "You are the Smart Worksite Q&A assistant. "
             + "Answer the user's question directly using only the supplied conversation context when relevant. "
             + "Do not claim retrieval, database, OCR, report, or compliance-review results unless they are provided.";
 
     public QaMessageApplicationService(RouteDecisionFacade routeDecisionFacade,
                                        KnowledgeSearchFacade knowledgeSearchFacade,
-                                       ModelCallApplicationService modelCallApplicationService) {
+                                       ModelCallApplicationService modelCallApplicationService,
+                                       DatabaseQuestionApplicationService databaseQuestionApplicationService) {
         this(routeDecisionFacade, knowledgeSearchFacade, modelCallApplicationService,
-                new ConversationContextAssembler());
+                databaseQuestionApplicationService, new ConversationContextAssembler());
     }
 
     QaMessageApplicationService(RouteDecisionFacade routeDecisionFacade,
                                 KnowledgeSearchFacade knowledgeSearchFacade,
                                 ModelCallApplicationService modelCallApplicationService,
+                                DatabaseQuestionApplicationService databaseQuestionApplicationService,
                                 ConversationContextAssembler conversationContextAssembler) {
         this.routeDecisionFacade = routeDecisionFacade;
         this.knowledgeSearchFacade = knowledgeSearchFacade;
         this.modelCallApplicationService = modelCallApplicationService;
+        this.databaseQuestionApplicationService = databaseQuestionApplicationService;
         this.conversationContextAssembler = conversationContextAssembler;
     }
 
@@ -98,8 +109,92 @@ public class QaMessageApplicationService {
             response.setAnswer(modelCall.getContent());
             return response;
         }
+        if (routeDecision.getRouteMode() == RouteMode.DATABASE) {
+            DatabaseQueryResponse databaseQuery = databaseQuestionApplicationService.query(
+                    databaseRequest(request, routeDecision));
+            validateDatabaseQuery(request, routeDecision, databaseQuery);
+            response.setDatabaseQuery(databaseQuery);
+            response.setPendingReason("Answer generation awaits model synthesis after database validation");
+            return response;
+        }
         response.setPendingReason("Answer generation awaits selected capability adapters");
         return response;
+    }
+
+    private DatabaseQueryRequest databaseRequest(QaMessageRequest request, RouteDecisionResponse routeDecision) {
+        requireText(request.getSql(), "QA SQL must not be blank for DATABASE route");
+        DatabaseQueryRequest databaseRequest = new DatabaseQueryRequest();
+        databaseRequest.setProjectId(request.getProjectId());
+        databaseRequest.setUserId(request.getUserId());
+        databaseRequest.setRequestId(request.getRequestId());
+        databaseRequest.setRouteMode(routeDecision.getRouteMode().name());
+        databaseRequest.setDataSourceId(singleDataSourceId(routeDecision));
+        databaseRequest.setQuestion(request.getQuestion());
+        databaseRequest.setSql(request.getSql());
+        databaseRequest.setPageNo(DATABASE_PAGE_NO);
+        databaseRequest.setPageSize(DATABASE_PAGE_SIZE);
+        databaseRequest.setTimeoutMs(DATABASE_TIMEOUT_MS);
+        return databaseRequest;
+    }
+
+    private Long singleDataSourceId(RouteDecisionResponse routeDecision) {
+        if (routeDecision.getSelectedDataSourceIds().size() != 1) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR,
+                    "QA DATABASE route currently requires exactly one data source");
+        }
+        return routeDecision.getSelectedDataSourceIds().get(0);
+    }
+
+    private void validateDatabaseQuery(QaMessageRequest request, RouteDecisionResponse routeDecision,
+                                       DatabaseQueryResponse databaseQuery) {
+        if (databaseQuery == null) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA database query response must not be null");
+        }
+        if (!request.getProjectId().equals(databaseQuery.getProjectId())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA database query project id must match request");
+        }
+        if (!sameNullable(request.getUserId(), databaseQuery.getUserId())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA database query user id must match request");
+        }
+        if (!sameNullable(request.getRequestId(), databaseQuery.getRequestId())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA database query request id must match request");
+        }
+        if (!routeDecision.getRouteMode().name().equals(databaseQuery.getRouteMode())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA database query route mode must match route decision");
+        }
+        if (!singleDataSourceId(routeDecision).equals(databaseQuery.getDataSourceId())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA database query data source must match route decision");
+        }
+        if (!Integer.valueOf(DATABASE_PAGE_NO).equals(databaseQuery.getPageNo())
+                || !Integer.valueOf(DATABASE_PAGE_SIZE).equals(databaseQuery.getPageSize())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA database query pagination must match request");
+        }
+        if (databaseQuery.getCostMs() == null || databaseQuery.getCostMs() < 0) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA database query costMs must not be null or negative");
+        }
+        if (databaseQuery.getColumns() == null || databaseQuery.getRows() == null
+                || databaseQuery.getTables() == null) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA database query result lists must not be null");
+        }
+        requireRouteText(databaseQuery.getSqlSummary(),
+                "QA database query SQL summary must not be blank");
+        requireRouteText(databaseQuery.getResultSummary(),
+                "QA database query result summary must not be blank");
+        if (!DATABASE_EXECUTION_STATUS_VALIDATED_NOT_EXECUTED.equals(databaseQuery.getExecutionStatus())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA database query execution status must be validated-not-executed");
+        }
+        requireRouteText(databaseQuery.getExecutionBlockedReason(),
+                "QA database query execution blocked reason must not be blank");
     }
 
     private ModelCallRequest modelRequest(QaMessageRequest request, RouteDecisionResponse routeDecision,
@@ -333,6 +428,7 @@ public class QaMessageApplicationService {
         requirePositive(request.getUserId(), "QA user id must be positive");
         requireText(request.getQuestion(), "QA question must not be blank");
         requireMaxLength(request.getQuestion(), 1000, "QA question must not exceed 1000 characters");
+        requireMaxLength(request.getSql(), 10000, "QA SQL must not exceed 10000 characters");
         requireMaxLength(request.getRequestId(), 128, "Request id must not exceed 128 characters");
         if (request.getRouteMode() == null) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "QA route mode must not be null");

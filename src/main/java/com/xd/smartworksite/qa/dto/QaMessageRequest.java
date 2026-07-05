@@ -25,6 +25,9 @@ public class QaMessageRequest {
     @Size(max = 1000)
     private String question;
 
+    @Size(max = 10000)
+    private String sql;
+
     @NotNull
     private RouteMode routeMode = RouteMode.AUTO;
 
@@ -72,6 +75,14 @@ public class QaMessageRequest {
 
     public void setQuestion(String question) {
         this.question = question;
+    }
+
+    public String getSql() {
+        return sql;
+    }
+
+    public void setSql(String sql) {
+        this.sql = sql;
     }
 
     public RouteMode getRouteMode() {
