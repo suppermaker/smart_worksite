@@ -18,6 +18,7 @@ public class QaMessageApplicationService {
 
     private final RouteDecisionFacade routeDecisionFacade;
     private final ConversationContextAssembler conversationContextAssembler;
+    private static final int MAX_CONTEXT_SUMMARY_LENGTH = 2000;
 
     public QaMessageApplicationService(RouteDecisionFacade routeDecisionFacade) {
         this(routeDecisionFacade, new ConversationContextAssembler());
@@ -33,6 +34,8 @@ public class QaMessageApplicationService {
         validateRequest(sessionId, request);
         String contextSummary = conversationContextAssembler.assemble(
                 request.getHistory(), request.getMaxContextMessages() == null ? 0 : request.getMaxContextMessages());
+        requireMaxLength(contextSummary, MAX_CONTEXT_SUMMARY_LENGTH,
+                "QA context summary must not exceed 2000 characters");
         RouteDecisionRequest routeRequest = new RouteDecisionRequest();
         routeRequest.setProjectId(request.getProjectId());
         routeRequest.setUserId(request.getUserId());
