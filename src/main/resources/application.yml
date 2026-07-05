@@ -49,6 +49,13 @@ app:
       stale-after-ms: ${TASK_TIMEOUT_SCAN_STALE_AFTER_MS:}
       batch-limit: ${TASK_TIMEOUT_SCAN_BATCH_LIMIT:}
       reason: ${TASK_TIMEOUT_SCAN_REASON:}
+  knowledge:
+    retrieval:
+      http:
+        enabled: ${KNOWLEDGE_RETRIEVAL_HTTP_ENABLED:false}
+        endpoint: ${KNOWLEDGE_RETRIEVAL_HTTP_ENDPOINT:}
+        api-key: ${KNOWLEDGE_RETRIEVAL_HTTP_API_KEY:}
+        timeout-ms: ${KNOWLEDGE_RETRIEVAL_HTTP_TIMEOUT_MS:}
   intelligence:
     model:
       openai-compatible:

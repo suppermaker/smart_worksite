@@ -4,11 +4,13 @@ import com.xd.smartworksite.common.exception.BusinessException;
 import com.xd.smartworksite.common.result.ErrorCode;
 import com.xd.smartworksite.knowledge.dto.KnowledgeSearchRequest;
 import com.xd.smartworksite.knowledge.dto.KnowledgeSearchResponse;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 @Component
+@ConditionalOnProperty(prefix = "app.knowledge.retrieval.http", name = "enabled", havingValue = "false", matchIfMissing = true)
 public class UnavailableKnowledgeRetrievalClient implements KnowledgeRetrievalClient {
 
     @Override
