@@ -78,6 +78,7 @@ public class TaskWorkerService {
             }
             runningTaskForFailure = task;
             GenerateTask runningTask = taskApplicationService.loadTaskForWorker(task.getId());
+            validateRunningTask(task, runningTask, message);
             handler.get().handle(new TaskExecutionContext(runningTask, message));
             taskApplicationService.markSuccess(runningTask);
             return true;
@@ -120,6 +121,26 @@ public class TaskWorkerService {
         }
         if (message.getRequestId() != null && message.getRequestId().length() > 128) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "Task queue message request id must not exceed 128 characters");
+        }
+    }
+
+    private void validateRunningTask(GenerateTask originalTask, GenerateTask runningTask, TaskQueueMessage message) {
+        if (runningTask == null) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Running task reload must not be null");
+        }
+        if (!originalTask.getId().equals(runningTask.getId()) || !message.getTaskId().equals(runningTask.getId())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Running task id does not match dispatch context");
+        }
+        if (!originalTask.getProjectId().equals(runningTask.getProjectId())
+                || !message.getProjectId().equals(runningTask.getProjectId())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Running task project does not match dispatch context");
+        }
+        if (!originalTask.getTaskType().equals(runningTask.getTaskType())
+                || !message.getTaskType().equals(runningTask.getTaskType())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Running task type does not match dispatch context");
+        }
+        if (runningTask.getStatus() != TaskStatus.RUNNING) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Running task status must be RUNNING before handler dispatch");
         }
     }
 
