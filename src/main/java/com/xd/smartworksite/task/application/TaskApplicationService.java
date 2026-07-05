@@ -11,6 +11,7 @@ import com.xd.smartworksite.task.domain.TaskQueueMessage;
 import com.xd.smartworksite.task.domain.TaskStageCode;
 import com.xd.smartworksite.task.domain.TaskStageLog;
 import com.xd.smartworksite.task.domain.TaskStageStatus;
+import com.xd.smartworksite.task.domain.TaskExecutionInterruptedException;
 import com.xd.smartworksite.task.domain.TaskStatus;
 import com.xd.smartworksite.task.dto.TaskCreateRequest;
 import com.xd.smartworksite.task.dto.TaskResponse;
@@ -174,6 +175,22 @@ public class TaskApplicationService implements TaskStageFacade {
         }
     }
 
+    public void checkExecutionStillRunning(GenerateTask dispatchTask) {
+        validateWorkerTask(dispatchTask);
+        GenerateTask currentTask = loadTask(dispatchTask.getId());
+        validateCheckpointTask(dispatchTask, currentTask);
+        if (currentTask.getStatus() == TaskStatus.RUNNING) {
+            return;
+        }
+        if (currentTask.getStatus() == TaskStatus.CANCELED) {
+            throw new TaskExecutionInterruptedException("Task execution interrupted because task was canceled");
+        }
+        if (currentTask.getStatus() == TaskStatus.FAILED) {
+            throw new TaskExecutionInterruptedException("Task execution interrupted because task is no longer running");
+        }
+        throw new BusinessException(ErrorCode.CONFLICT, "Task execution checkpoint requires RUNNING status");
+    }
+
     GenerateTask loadTaskForWorker(Long taskId) {
         if (taskId == null) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "Task id must not be null");
@@ -284,6 +301,19 @@ public class TaskApplicationService implements TaskStageFacade {
         }
         if (task.getCurrentStage() == null) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "Task current stage must not be null");
+        }
+    }
+
+    private void validateCheckpointTask(GenerateTask dispatchTask, GenerateTask currentTask) {
+        validateWorkerTask(currentTask);
+        if (!dispatchTask.getId().equals(currentTask.getId())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Task checkpoint id does not match dispatch context");
+        }
+        if (!dispatchTask.getProjectId().equals(currentTask.getProjectId())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Task checkpoint project does not match dispatch context");
+        }
+        if (!dispatchTask.getTaskType().equals(currentTask.getTaskType())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Task checkpoint type does not match dispatch context");
         }
     }
 

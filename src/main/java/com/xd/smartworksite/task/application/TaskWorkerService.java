@@ -9,6 +9,7 @@ import com.xd.smartworksite.common.redis.RedisQueueService;
 import com.xd.smartworksite.common.result.ErrorCode;
 import com.xd.smartworksite.task.domain.GenerateTask;
 import com.xd.smartworksite.task.domain.TaskExecutionContext;
+import com.xd.smartworksite.task.domain.TaskExecutionInterruptedException;
 import com.xd.smartworksite.task.domain.TaskQueueMessage;
 import com.xd.smartworksite.task.domain.TaskStatus;
 import org.springframework.stereotype.Service;
@@ -79,9 +80,12 @@ public class TaskWorkerService {
             GenerateTask runningTask = taskApplicationService.loadTaskForWorker(task.getId());
             validateRunningTask(task, runningTask, message);
             runningTaskForFailure = runningTask;
-            handler.get().handle(new TaskExecutionContext(runningTask, message));
+            handler.get().handle(new TaskExecutionContext(runningTask, message,
+                    () -> taskApplicationService.checkExecutionStillRunning(runningTask)));
             taskApplicationService.markSuccess(runningTask);
             return true;
+        } catch (TaskExecutionInterruptedException exception) {
+            throw exception;
         } catch (RuntimeException exception) {
             if (runningTaskForFailure != null && runningTaskForFailure.getStatus() == TaskStatus.RUNNING) {
                 taskApplicationService.markFailed(runningTaskForFailure, summarize(exception));

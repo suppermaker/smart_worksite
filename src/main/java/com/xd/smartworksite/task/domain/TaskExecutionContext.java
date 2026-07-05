@@ -5,6 +5,11 @@ import com.xd.smartworksite.common.result.ErrorCode;
 
 public class TaskExecutionContext {
 
+    @FunctionalInterface
+    public interface InterruptionCheckpoint {
+        void check();
+    }
+
     private final Long taskId;
     private final Long projectId;
     private final Long userId;
@@ -12,12 +17,18 @@ public class TaskExecutionContext {
     private final String taskType;
     private final String bizType;
     private final Long bizId;
+    private final InterruptionCheckpoint interruptionCheckpoint;
 
     public TaskExecutionContext(GenerateTask task) {
         this(task, null);
     }
 
     public TaskExecutionContext(GenerateTask task, TaskQueueMessage message) {
+        this(task, message, null);
+    }
+
+    public TaskExecutionContext(GenerateTask task, TaskQueueMessage message,
+                                InterruptionCheckpoint interruptionCheckpoint) {
         validateTask(task);
         validateMessageMatch(task, message);
         this.taskId = task.getId();
@@ -27,6 +38,7 @@ public class TaskExecutionContext {
         this.taskType = task.getTaskType();
         this.bizType = task.getBizType();
         this.bizId = task.getBizId();
+        this.interruptionCheckpoint = interruptionCheckpoint;
     }
 
     private void validateTask(GenerateTask task) {
@@ -99,5 +111,13 @@ public class TaskExecutionContext {
 
     public Long getBizId() {
         return bizId;
+    }
+
+    public void checkInterruption() {
+        if (interruptionCheckpoint == null) {
+            throw new BusinessException(ErrorCode.CONFLICT,
+                    "Task interruption checkpoint is not configured for this execution context");
+        }
+        interruptionCheckpoint.check();
     }
 }
