@@ -76,9 +76,9 @@ public class TaskWorkerService {
             if (!taskApplicationService.markRunning(task)) {
                 return false;
             }
-            runningTaskForFailure = task;
             GenerateTask runningTask = taskApplicationService.loadTaskForWorker(task.getId());
             validateRunningTask(task, runningTask, message);
+            runningTaskForFailure = runningTask;
             handler.get().handle(new TaskExecutionContext(runningTask, message));
             taskApplicationService.markSuccess(runningTask);
             return true;
