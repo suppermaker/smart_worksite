@@ -36,9 +36,7 @@ public class KnowledgeSearchApplicationService implements KnowledgeSearchFacade 
         KnowledgeSearchResponse response = knowledgeRetrievalClient.search(request, validatedKnowledgeBaseIds);
         validateRetrievalResponse(response, request, validatedKnowledgeBaseIds);
         applyResponseContext(request, validatedKnowledgeBaseIds, response);
-        if (response.getExternalCallSummary() == null) {
-            response.setExternalCallSummary(summary(request, validatedKnowledgeBaseIds, response));
-        }
+        response.setExternalCallSummary(summary(request, validatedKnowledgeBaseIds, response));
         applySummaryContext(request, response.getExternalCallSummary());
         return response;
     }
