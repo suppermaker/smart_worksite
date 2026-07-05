@@ -28,6 +28,7 @@ public class ModelCallApplicationService {
         long start = System.nanoTime();
         try {
             ModelCallResponse response = modelProviderClient.call(request);
+            validateProviderResponse(response);
             applyRequestContext(request, response);
             if (response.getExternalCallSummary() == null) {
                 response.setExternalCallSummary(summary(request, response.getStatus(), response.getErrorMessage(),
@@ -46,6 +47,15 @@ public class ModelCallApplicationService {
             response.setExternalCallSummary(summary(request, ModelCallStatus.FAILED, exception.getMessage(),
                     response.getCostMs()));
             return response;
+        }
+    }
+
+    private void validateProviderResponse(ModelCallResponse response) {
+        if (response == null) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Model provider response must not be null");
+        }
+        if (response.getStatus() == null) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Model provider response status must not be null");
         }
     }
 
