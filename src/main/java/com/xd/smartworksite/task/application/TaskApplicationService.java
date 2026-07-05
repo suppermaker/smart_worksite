@@ -145,6 +145,7 @@ public class TaskApplicationService implements TaskStageFacade {
     @Transactional
     public void markFailed(GenerateTask task, String errorMessage) {
         validateWorkerTask(task);
+        requireText(errorMessage, "Task failure message must not be blank");
         requireMaxLength(errorMessage, 4000, "Task failure message must not exceed 4000 characters");
         TaskStatus expectedStatus = task.getStatus();
         task.transitionTo(TaskStatus.FAILED);
