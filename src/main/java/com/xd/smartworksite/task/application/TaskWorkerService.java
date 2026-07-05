@@ -151,10 +151,7 @@ public class TaskWorkerService {
     }
 
     private String summarize(RuntimeException exception) {
-        String message = exception.getMessage();
-        if (message == null || message.isBlank()) {
-            return exception.getClass().getSimpleName();
-        }
-        return message.length() <= 500 ? message : message.substring(0, 500);
+        String type = exception == null ? RuntimeException.class.getSimpleName() : exception.getClass().getSimpleName();
+        return "Task handler failed: " + type;
     }
 }
