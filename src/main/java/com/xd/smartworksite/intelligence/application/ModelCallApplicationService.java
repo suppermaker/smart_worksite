@@ -57,6 +57,32 @@ public class ModelCallApplicationService {
         if (response.getStatus() == null) {
             throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Model provider response status must not be null");
         }
+        if (response.getProvider() == null || response.getProvider().isBlank()) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Model provider response provider must not be blank");
+        }
+        if (response.getModelName() == null || response.getModelName().isBlank()) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Model provider response model name must not be blank");
+        }
+        if (response.getCostMs() == null) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Model provider response costMs must not be null");
+        }
+        if (response.getCostMs() < 0) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Model provider response costMs must not be negative");
+        }
+        if (response.getPromptTokens() != null && response.getPromptTokens() < 0) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Model provider response prompt tokens must not be negative");
+        }
+        if (response.getCompletionTokens() != null && response.getCompletionTokens() < 0) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Model provider response completion tokens must not be negative");
+        }
+        if (response.getStatus() == ModelCallStatus.SUCCESS
+                && (response.getContent() == null || response.getContent().isBlank())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Model provider success response content must not be blank");
+        }
+        if (response.getStatus() == ModelCallStatus.FAILED
+                && (response.getErrorMessage() == null || response.getErrorMessage().isBlank())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Model provider failed response error message must not be blank");
+        }
     }
 
     private void applyRequestContext(ModelCallRequest request, ModelCallResponse response) {
