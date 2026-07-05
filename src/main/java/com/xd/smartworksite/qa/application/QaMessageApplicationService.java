@@ -6,6 +6,9 @@ import com.xd.smartworksite.intelligence.domain.RouteMode;
 import com.xd.smartworksite.intelligence.dto.RouteDecisionRequest;
 import com.xd.smartworksite.intelligence.dto.RouteDecisionResponse;
 import com.xd.smartworksite.intelligence.facade.RouteDecisionFacade;
+import com.xd.smartworksite.knowledge.dto.KnowledgeSearchRequest;
+import com.xd.smartworksite.knowledge.dto.KnowledgeSearchResponse;
+import com.xd.smartworksite.knowledge.facade.KnowledgeSearchFacade;
 import com.xd.smartworksite.qa.domain.QaReplyStatus;
 import com.xd.smartworksite.qa.dto.QaHistoryMessageRequest;
 import com.xd.smartworksite.qa.dto.QaMessageRequest;
@@ -18,16 +21,21 @@ import java.util.List;
 public class QaMessageApplicationService {
 
     private final RouteDecisionFacade routeDecisionFacade;
+    private final KnowledgeSearchFacade knowledgeSearchFacade;
     private final ConversationContextAssembler conversationContextAssembler;
     private static final int MAX_CONTEXT_SUMMARY_LENGTH = 2000;
+    private static final int KNOWLEDGE_TOP_K = 5;
 
-    public QaMessageApplicationService(RouteDecisionFacade routeDecisionFacade) {
-        this(routeDecisionFacade, new ConversationContextAssembler());
+    public QaMessageApplicationService(RouteDecisionFacade routeDecisionFacade,
+                                       KnowledgeSearchFacade knowledgeSearchFacade) {
+        this(routeDecisionFacade, knowledgeSearchFacade, new ConversationContextAssembler());
     }
 
     QaMessageApplicationService(RouteDecisionFacade routeDecisionFacade,
+                                KnowledgeSearchFacade knowledgeSearchFacade,
                                 ConversationContextAssembler conversationContextAssembler) {
         this.routeDecisionFacade = routeDecisionFacade;
+        this.knowledgeSearchFacade = knowledgeSearchFacade;
         this.conversationContextAssembler = conversationContextAssembler;
     }
 
@@ -62,8 +70,69 @@ public class QaMessageApplicationService {
             return response;
         }
         response.setStatus(QaReplyStatus.ROUTE_DECIDED);
+        if (routeDecision.getRouteMode() == RouteMode.KNOWLEDGE) {
+            KnowledgeSearchResponse knowledgeSearch = knowledgeSearchFacade.search(knowledgeRequest(request, routeDecision));
+            validateKnowledgeSearch(request, routeDecision, knowledgeSearch);
+            response.setKnowledgeSearch(knowledgeSearch);
+            response.setPendingReason("Answer generation awaits model synthesis after knowledge retrieval");
+            return response;
+        }
         response.setPendingReason("Answer generation awaits selected capability adapters");
         return response;
+    }
+
+    private KnowledgeSearchRequest knowledgeRequest(QaMessageRequest request, RouteDecisionResponse routeDecision) {
+        KnowledgeSearchRequest knowledgeRequest = new KnowledgeSearchRequest();
+        knowledgeRequest.setProjectId(request.getProjectId());
+        knowledgeRequest.setUserId(request.getUserId());
+        knowledgeRequest.setRequestId(request.getRequestId());
+        knowledgeRequest.setRouteMode(routeDecision.getRouteMode().name());
+        knowledgeRequest.setQuery(request.getQuestion());
+        knowledgeRequest.setKnowledgeBaseIds(routeDecision.getSelectedKnowledgeBaseIds());
+        knowledgeRequest.setTopK(KNOWLEDGE_TOP_K);
+        return knowledgeRequest;
+    }
+
+    private void validateKnowledgeSearch(QaMessageRequest request, RouteDecisionResponse routeDecision,
+                                         KnowledgeSearchResponse knowledgeSearch) {
+        if (knowledgeSearch == null) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA knowledge search response must not be null");
+        }
+        if (!request.getProjectId().equals(knowledgeSearch.getProjectId())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA knowledge search project id must match request");
+        }
+        if (!sameNullable(request.getUserId(), knowledgeSearch.getUserId())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA knowledge search user id must match request");
+        }
+        if (!sameNullable(request.getRequestId(), knowledgeSearch.getRequestId())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA knowledge search request id must match request");
+        }
+        if (!routeDecision.getRouteMode().name().equals(knowledgeSearch.getRouteMode())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA knowledge search route mode must match route decision");
+        }
+        if (!routeDecision.getSelectedKnowledgeBaseIds().equals(knowledgeSearch.getKnowledgeBaseIds())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA knowledge search knowledge base scope must match route decision");
+        }
+        if (!Integer.valueOf(KNOWLEDGE_TOP_K).equals(knowledgeSearch.getTopK())) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA knowledge search topK must match request");
+        }
+        if (knowledgeSearch.getSnippets() == null) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA knowledge search snippets must not be null");
+        }
+        if (knowledgeSearch.getCostMs() == null || knowledgeSearch.getCostMs() < 0) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR,
+                    "QA knowledge search costMs must not be null or negative");
+        }
+        requireRouteText(knowledgeSearch.getResultSummary(),
+                "QA knowledge search result summary must not be blank");
     }
 
     private void validateRouteDecision(QaMessageRequest request, RouteDecisionResponse routeDecision) {
