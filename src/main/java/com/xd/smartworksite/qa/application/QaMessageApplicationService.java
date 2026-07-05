@@ -51,6 +51,10 @@ public class QaMessageApplicationService {
     private static final String MODEL_SYSTEM_PROMPT = "You are the Smart Worksite Q&A assistant. "
             + "Answer the user's question directly using only the supplied conversation context when relevant. "
             + "Do not claim retrieval, database, OCR, report, or compliance-review results unless they are provided.";
+    private static final String SYNTHESIS_SYSTEM_PROMPT = "You are the Smart Worksite Q&A synthesis assistant. "
+            + "Answer only from the validated component summaries supplied by the service. "
+            + "Preserve cited knowledge references and database validation limits. "
+            + "Do not invent execution results, row values, citations, or external diagnostics.";
 
     public QaMessageApplicationService(RouteDecisionFacade routeDecisionFacade,
                                        KnowledgeSearchFacade knowledgeSearchFacade,
@@ -124,15 +128,20 @@ public class QaMessageApplicationService {
         }
         response.setStatus(QaReplyStatus.ROUTE_DECIDED);
         if (routeDecision.getRouteMode() == RouteMode.KNOWLEDGE) {
-            response.setKnowledgeSearch(executeKnowledgeSearch(request, routeDecision));
-            response.setPendingReason("Answer generation awaits model synthesis after knowledge retrieval");
+            KnowledgeSearchResponse knowledgeSearch = executeKnowledgeSearch(request, routeDecision);
+            response.setKnowledgeSearch(knowledgeSearch);
+            synthesizeAnswer(request, routeDecision, response,
+                    knowledgeSynthesisPrompt(request.getQuestion(), contextSummary, knowledgeSearch));
             persistExchange(request, response);
             return response;
         }
         if (routeDecision.getRouteMode() == RouteMode.MIXED) {
-            response.setKnowledgeSearch(executeKnowledgeSearch(request, routeDecision));
-            response.setDatabaseQuery(executeDatabaseQuery(request, routeDecision));
-            response.setPendingReason("Answer generation awaits model synthesis after mixed retrieval and database validation");
+            KnowledgeSearchResponse knowledgeSearch = executeKnowledgeSearch(request, routeDecision);
+            DatabaseQueryResponse databaseQuery = executeDatabaseQuery(request, routeDecision);
+            response.setKnowledgeSearch(knowledgeSearch);
+            response.setDatabaseQuery(databaseQuery);
+            synthesizeAnswer(request, routeDecision, response,
+                    mixedSynthesisPrompt(request.getQuestion(), contextSummary, knowledgeSearch, databaseQuery));
             persistExchange(request, response);
             return response;
         }
@@ -145,14 +154,25 @@ public class QaMessageApplicationService {
             return response;
         }
         if (routeDecision.getRouteMode() == RouteMode.DATABASE) {
-            response.setDatabaseQuery(executeDatabaseQuery(request, routeDecision));
-            response.setPendingReason("Answer generation awaits model synthesis after database validation");
+            DatabaseQueryResponse databaseQuery = executeDatabaseQuery(request, routeDecision);
+            response.setDatabaseQuery(databaseQuery);
+            synthesizeAnswer(request, routeDecision, response,
+                    databaseSynthesisPrompt(request.getQuestion(), contextSummary, databaseQuery));
             persistExchange(request, response);
             return response;
         }
         response.setPendingReason("Answer generation awaits selected capability adapters");
         persistExchange(request, response);
         return response;
+    }
+
+    private void synthesizeAnswer(QaMessageRequest request, RouteDecisionResponse routeDecision,
+                                  QaMessageResponse response, String synthesisPrompt) {
+        ModelCallResponse modelCall = modelCallApplicationService.call(synthesisRequest(request, routeDecision, synthesisPrompt));
+        validateModelCall(request, routeDecision, modelCall);
+        response.setModelCall(modelCall);
+        response.setAnswer(modelCall.getContent());
+        response.setPendingReason(null);
     }
 
     private void persistExchange(QaMessageRequest request, QaMessageResponse response) {
@@ -307,6 +327,21 @@ public class QaMessageApplicationService {
         return modelRequest;
     }
 
+    private ModelCallRequest synthesisRequest(QaMessageRequest request, RouteDecisionResponse routeDecision,
+                                              String synthesisPrompt) {
+        ModelCallRequest modelRequest = new ModelCallRequest();
+        modelRequest.setProjectId(request.getProjectId());
+        modelRequest.setUserId(request.getUserId());
+        modelRequest.setRequestId(request.getRequestId());
+        modelRequest.setRouteMode(routeDecision.getRouteMode());
+        modelRequest.setTimeoutMs(MODEL_TIMEOUT_MS);
+        modelRequest.setMessages(List.of(
+                modelMessage("system", SYNTHESIS_SYSTEM_PROMPT),
+                modelMessage("user", synthesisPrompt)
+        ));
+        return modelRequest;
+    }
+
     private ModelMessageRequest modelMessage(String role, String content) {
         ModelMessageRequest message = new ModelMessageRequest();
         message.setRole(role);
@@ -319,6 +354,63 @@ public class QaMessageApplicationService {
             return "Question:\n" + question.trim();
         }
         return "Conversation context:\n" + contextSummary + "\n\nQuestion:\n" + question.trim();
+    }
+
+    private String knowledgeSynthesisPrompt(String question, String contextSummary,
+                                            KnowledgeSearchResponse knowledgeSearch) {
+        StringBuilder prompt = synthesisPromptHeader(question, contextSummary);
+        prompt.append("\n\nValidated knowledge retrieval:\n")
+                .append("Knowledge base ids: ").append(knowledgeSearch.getKnowledgeBaseIds()).append('\n')
+                .append("Result summary: ").append(knowledgeSearch.getResultSummary()).append('\n')
+                .append("Citations:\n");
+        knowledgeSearch.getSnippets().forEach(snippet -> prompt.append("- knowledgeBaseId=")
+                .append(snippet.getKnowledgeBaseId())
+                .append(", documentId=").append(snippet.getDocumentId())
+                .append(", title=").append(safeText(snippet.getTitle()))
+                .append(", location=").append(safeText(snippet.getLocation()))
+                .append(", score=").append(snippet.getScore())
+                .append('\n'));
+        return prompt.toString();
+    }
+
+    private String databaseSynthesisPrompt(String question, String contextSummary,
+                                           DatabaseQueryResponse databaseQuery) {
+        StringBuilder prompt = synthesisPromptHeader(question, contextSummary);
+        appendDatabaseSynthesisContext(prompt, databaseQuery);
+        return prompt.toString();
+    }
+
+    private String mixedSynthesisPrompt(String question, String contextSummary,
+                                        KnowledgeSearchResponse knowledgeSearch,
+                                        DatabaseQueryResponse databaseQuery) {
+        StringBuilder prompt = new StringBuilder(knowledgeSynthesisPrompt(question, contextSummary, knowledgeSearch));
+        appendDatabaseSynthesisContext(prompt, databaseQuery);
+        return prompt.toString();
+    }
+
+    private StringBuilder synthesisPromptHeader(String question, String contextSummary) {
+        StringBuilder prompt = new StringBuilder();
+        if (contextSummary != null && !contextSummary.isBlank()) {
+            prompt.append("Conversation context:\n").append(contextSummary).append("\n\n");
+        }
+        prompt.append("Question:\n").append(question.trim());
+        return prompt;
+    }
+
+    private void appendDatabaseSynthesisContext(StringBuilder prompt, DatabaseQueryResponse databaseQuery) {
+        prompt.append("\n\nValidated database query:\n")
+                .append("Data source id: ").append(databaseQuery.getDataSourceId()).append('\n')
+                .append("Execution status: ").append(databaseQuery.getExecutionStatus()).append('\n')
+                .append("Execution blocked reason: ").append(databaseQuery.getExecutionBlockedReason()).append('\n')
+                .append("SQL summary: ").append(databaseQuery.getSqlSummary()).append('\n')
+                .append("Tables: ").append(databaseQuery.getTables()).append('\n')
+                .append("Columns: ").append(databaseQuery.getColumns()).append('\n')
+                .append("Result summary: ").append(databaseQuery.getResultSummary()).append('\n')
+                .append("Rows are not available unless executionStatus is EXECUTED; do not invent row values.\n");
+    }
+
+    private String safeText(String value) {
+        return value == null || value.isBlank() ? "n/a" : value.trim();
     }
 
     private void validateModelCall(QaMessageRequest request, RouteDecisionResponse routeDecision,
