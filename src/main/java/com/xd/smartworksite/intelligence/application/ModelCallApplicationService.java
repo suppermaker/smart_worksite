@@ -30,10 +30,8 @@ public class ModelCallApplicationService {
             ModelCallResponse response = modelProviderClient.call(request);
             validateProviderResponse(response);
             applyRequestContext(request, response);
-            if (response.getExternalCallSummary() == null) {
-                response.setExternalCallSummary(summary(request, response.getStatus(), response.getErrorMessage(),
-                        elapsedMs(start)));
-            }
+            response.setExternalCallSummary(summary(request, response.getStatus(), response.getErrorMessage(),
+                    response.getCostMs()));
             applySummaryContext(request, response.getExternalCallSummary());
             return response;
         } catch (BusinessException exception) {
