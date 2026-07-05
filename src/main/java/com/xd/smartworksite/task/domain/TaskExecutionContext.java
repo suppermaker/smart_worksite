@@ -57,6 +57,9 @@ public class TaskExecutionContext {
         if (!task.getProjectId().equals(message.getProjectId())) {
             throw new BusinessException(ErrorCode.CONFLICT, "Task execution context message project id does not match task");
         }
+        if (!task.getTaskType().equals(message.getTaskType())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Task execution context message type does not match task");
+        }
     }
 
     public Long getTaskId() {

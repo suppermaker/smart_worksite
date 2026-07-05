@@ -61,6 +61,9 @@ public class TaskWorkerService {
             if (!task.getProjectId().equals(message.getProjectId())) {
                 throw new BusinessException(ErrorCode.FORBIDDEN, "Task queue message project does not match task");
             }
+            if (!task.getTaskType().equals(message.getTaskType())) {
+                throw new BusinessException(ErrorCode.CONFLICT, "Task queue message type does not match task");
+            }
             if (task.getStatus() != TaskStatus.QUEUED && task.getStatus() != TaskStatus.RETRYING) {
                 return false;
             }
