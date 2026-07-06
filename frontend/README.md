@@ -2,10 +2,25 @@
 
 Vue 3 + TypeScript + Vite + Pinia + Vue Router + Axios + Element Plus。
 
+## 技术栈
+
+| 技术 | 用途 |
+| --- | --- |
+| Vue 3 | 前端框架 |
+| TypeScript | 类型约束 |
+| Vite | 开发服务和构建工具 |
+| Pinia | 全局状态管理 |
+| Vue Router | 路由和权限守卫 |
+| Axios | HTTP请求 |
+| Element Plus | UI组件库 |
+| @element-plus/icons-vue | 图标库 |
+
+前端只调用 Java Spring Boot 后端接口，不直接调用 Python 智能算法服务、数据库、对象存储或向量库。智能体、RAG、OCR算法和文档解析等AI能力由 Python 服务实现，并由 Java 后端统一编排。
+
 ## 启动方式
 
 ```powershell
-cd C:\Users\Dell\Documents\smart_worksite\frontend
+cd F:\xd_project\smart_worksite\frontend
 npm install
 npm run dev
 ```
@@ -36,8 +51,6 @@ VITE_USE_MOCK=true
 
 mock 数据统一放在 `src/mocks/`，页面通过 `src/api/` service 间接获取数据，不在页面中拼接 URL。
 
-当前 mock 字段尽量贴近接口文档，包含 `id`、`projectId`、`taskId`、`fileId`、`status`、`createdAt`、`updatedAt` 等联调基础字段。
-
 ## 目录结构
 
 ```text
@@ -57,8 +70,6 @@ src/
 ## History 路由部署说明
 
 前端使用 `createWebHistory()`。生产部署时 Nginx 或静态资源服务器必须把未知前端路由回退到 `index.html`，否则刷新 `/qa`、`/report/10001` 会返回 404。
-
-Nginx 示例：
 
 ```nginx
 location / {
