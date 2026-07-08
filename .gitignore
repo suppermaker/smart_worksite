@@ -29,3 +29,36 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env.local
 frontend/.env.*.local
+
+.venv/
+.pytest_cache/
+python-ai-service/.env
+python-ai-service/.venv/
+python-ai-service/.pytest_cache/
+python-ai-service/data/
+.java-*.log
+.java-*.err.log
+
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+dist/
+htmlcov/
+.coverage
+.coverage.*
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+
+### Python AI Service Generated ###
+python-ai-service/**/__pycache__/
+python-ai-service/**/*.py[cod]
+python-ai-service/.coverage
+python-ai-service/.coverage.*
+python-ai-service/htmlcov/
+python-ai-service/.mypy_cache/
+python-ai-service/.ruff_cache/

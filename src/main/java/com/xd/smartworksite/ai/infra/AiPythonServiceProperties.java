@@ -1,0 +1,76 @@
+package com.xd.smartworksite.ai.infra;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+@Component
+@ConfigurationProperties(prefix = "app.ai.python-service")
+public class AiPythonServiceProperties {
+    private String baseUrl = "http://127.0.0.1:8015";
+    private int connectTimeoutMs = 5000;
+    private int readTimeoutMs = 120000;
+    private int retryCount = 1;
+    private String apiKey = "";
+    private Paths paths = new Paths();
+    private Database database = new Database();
+    private Security security = new Security();
+
+    public String getBaseUrl() { return baseUrl; }
+    public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+    public int getConnectTimeoutMs() { return connectTimeoutMs; }
+    public void setConnectTimeoutMs(int connectTimeoutMs) { this.connectTimeoutMs = connectTimeoutMs; }
+    public int getReadTimeoutMs() { return readTimeoutMs; }
+    public void setReadTimeoutMs(int readTimeoutMs) { this.readTimeoutMs = readTimeoutMs; }
+    public int getRetryCount() { return retryCount; }
+    public void setRetryCount(int retryCount) { this.retryCount = retryCount; }
+    public String getApiKey() { return apiKey; }
+    public void setApiKey(String apiKey) { this.apiKey = apiKey; }
+    public Paths getPaths() { return paths; }
+    public void setPaths(Paths paths) { this.paths = paths; }
+    public Database getDatabase() { return database; }
+    public void setDatabase(Database database) { this.database = database; }
+    public Security getSecurity() { return security; }
+    public void setSecurity(Security security) { this.security = security; }
+
+    public static class Paths {
+        private String modelInvoke = "/v1/model/invoke";
+        private String agentInvoke = "/v1/agent/invoke";
+        private String ragSearch = "/v1/rag/search";
+        private String ragIndex = "/v1/rag/index";
+        private String route = "/v1/route";
+        private String contextPrepare = "/v1/context/prepare";
+        private String databaseGenerateQuery = "/v1/database/generate-query";
+        private String databaseSummarizeResult = "/v1/database/summarize-result";
+        public String getModelInvoke() { return modelInvoke; }
+        public void setModelInvoke(String modelInvoke) { this.modelInvoke = modelInvoke; }
+        public String getAgentInvoke() { return agentInvoke; }
+        public void setAgentInvoke(String agentInvoke) { this.agentInvoke = agentInvoke; }
+        public String getRagSearch() { return ragSearch; }
+        public void setRagSearch(String ragSearch) { this.ragSearch = ragSearch; }
+        public String getRagIndex() { return ragIndex; }
+        public void setRagIndex(String ragIndex) { this.ragIndex = ragIndex; }
+        public String getRoute() { return route; }
+        public void setRoute(String route) { this.route = route; }
+        public String getContextPrepare() { return contextPrepare; }
+        public void setContextPrepare(String contextPrepare) { this.contextPrepare = contextPrepare; }
+        public String getDatabaseGenerateQuery() { return databaseGenerateQuery; }
+        public void setDatabaseGenerateQuery(String databaseGenerateQuery) { this.databaseGenerateQuery = databaseGenerateQuery; }
+        public String getDatabaseSummarizeResult() { return databaseSummarizeResult; }
+        public void setDatabaseSummarizeResult(String databaseSummarizeResult) { this.databaseSummarizeResult = databaseSummarizeResult; }
+    }
+
+    public static class Database {
+        private int maxRows = 100;
+        private int queryTimeoutSeconds = 15;
+        public int getMaxRows() { return maxRows; }
+        public void setMaxRows(int maxRows) { this.maxRows = maxRows; }
+        public int getQueryTimeoutSeconds() { return queryTimeoutSeconds; }
+        public void setQueryTimeoutSeconds(int queryTimeoutSeconds) { this.queryTimeoutSeconds = queryTimeoutSeconds; }
+    }
+
+    public static class Security {
+        private String dataSourcePasswordKey = "";
+        public String getDataSourcePasswordKey() { return dataSourcePasswordKey; }
+        public void setDataSourcePasswordKey(String dataSourcePasswordKey) { this.dataSourcePasswordKey = dataSourcePasswordKey; }
+    }
+}
