@@ -179,7 +179,8 @@ com.xd.smartworksite
 ```powershell
 cd deploy
 copy .env.example .env
-docker compose -p smart_worksite -f docker-compose-env.yml --env-file .env up -d```
+docker compose -f docker-compose-env.yml --env-file .env up -d
+
 
 ### 2. 启动后端
 
@@ -318,3 +319,45 @@ CRYPTO_AGENT_V3_READ_TIMEOUT_SECONDS=3000000
 ## AI能力说明
 
 本项目智能体能力使用 Python 智能算法服务实现，不使用 Java 实现智能体核心逻辑。前端不直接调用 Python 服务，所有 AI 能力由 Java 后端统一编排和权限控制后调用。
+
+
+
+## Python AI Service Startup
+
+```powershell
+cd python-ai-service
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env
+# Configure QWEN_API_KEY and AI_SERVICE_API_KEY in .env
+uvicorn app.main:app --host 0.0.0.0 --port 8015
+```
+
+The Java backend calls the Python service through `AI_PYTHON_BASE_URL` and `AI_PYTHON_API_KEY`. Qwen API keys must be configured only in the Python service, not in Java.
+
+
+## Advanced AI Capabilities
+
+The Python AI service now supports real RAG indexing and search. Documents are chunked, embedded, stored in a vector provider, and reranked during search. Configure these variables in `python-ai-service/.env`:
+
+```env
+EMBEDDING_PROVIDER=QWEN          # QWEN for production, LOCAL_HASH for offline tests
+QWEN_EMBEDDING_MODEL=text-embedding-v4
+QWEN_EMBEDDING_DIMENSIONS=1024
+QWEN_EMBEDDING_BATCH_SIZE=10
+RERANK_PROVIDER=QWEN             # QWEN rerank in production, lexical fallback on failure
+QWEN_RERANK_BASE_URL=https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
+QWEN_RERANK_MODEL=qwen3-rerank
+QWEN_RERANK_API_STYLE=LEGACY          # LEGACY uses DashScope input/parameters request body
+RAG_PROVIDER=LOCAL               # LOCAL, PGVECTOR, or MILVUS
+RAG_DATA_DIR=data/rag
+PGVECTOR_DSN=
+PGVECTOR_TABLE=smart_worksite_chunks
+MILVUS_URI=http://127.0.0.1:19530
+MILVUS_TOKEN=
+MILVUS_COLLECTION=smart_worksite_chunks
+```
+
+Java exposes `POST /api/ai/knowledge/index` for indexing documents and `POST /api/ai/knowledge/search` for vector retrieval. Database Q&A now supports MySQL, PostgreSQL, and Kingbase JDBC drivers, while still enforcing read-only SQL validation. PostgreSQL execution can be integration-tested with `AI_TEST_POSTGRES_JDBC_URL`, `AI_TEST_POSTGRES_USERNAME`, and `AI_TEST_POSTGRES_PASSWORD`; Kingbase execution can be integration-tested with `AI_TEST_KINGBASE_JDBC_URL`, `AI_TEST_KINGBASE_USERNAME`, and `AI_TEST_KINGBASE_PASSWORD` when a reachable Kingbase test instance exists.
+Qwen secrets stay in the Python service. Do not configure Qwen API keys in Java.

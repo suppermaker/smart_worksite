@@ -63,7 +63,7 @@ Integration boundaries:
 - Frontend calls only Java backend REST APIs.
 - Java backend owns authentication, authorization, project isolation, business orchestration, status records, file persistence, and audit tracing.
 - Java backend integrates Python intelligent algorithm services through REST APIs or internal service interfaces.
-- Large models, OCR engines, vector databases, business databases, and object storage are not directly exposed to the frontend.
+- Large models, OCR engines, vector databases, business databases, and object storage are not directly exposed to the frontend. Qwen API keys must be configured only in `python-ai-service/`; Java calls the Python service and must not call Qwen directly for the AI adapter module.
 - Cross-service calls must record request summary, response summary, elapsed time, status, and error information.
 
 ## Local Dependencies
@@ -96,6 +96,7 @@ Main modules:
 - `ocr`: OCR records, recognition types, structured fields, and result JSON.
 - `task`: async tasks, statuses, retries, cancellation, timeouts, and stage logs.
 - `audit`: operation audit logs, access logs, model calls, retrieval logs, OCR calls, and external call logs.
+- `ai`: Java intelligent capability adapter for Python AI services, including model/Agent calls, RAG search, routing, context preparation, safe database Q&A, and external call logs.
 
 Business modules may use these layers as needed: `controller`, `application`, `domain`, `repository`, `mapper`, `dto`, `infra`.
 
@@ -183,3 +184,23 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - Do not use dark mode as the default.
 - Do not use a flashy consumer AI chat product style.
 
+
+
+## Python Intelligent Service Rules
+
+- The Python intelligent algorithm service lives under `python-ai-service/`.
+- Qwen API keys must stay in the Python service `.env` or environment variables and must not be written to Java config, docs, SQL, or logs.
+- Java backend calls Python through `app.ai.python-service.*` and sends `X-AI-Service-Key` when configured.
+- Database Q&A uses Python to generate SQL and summaries, but Java must validate and execute only safe MySQL read-only SQL.
+- RAG, Agent, model reasoning, context compression, and semantic routing are Python responsibilities; Java owns project isolation, logging, error mapping, and API responses.
+
+
+## Advanced AI Adapter Rules
+
+- RAG indexing must use the Python service: document chunking, embedding, vector storage, retrieval, and rerank belong in `python-ai-service/`.
+- Supported vector providers are `LOCAL`, `PGVECTOR`, and `MILVUS`; Java must not directly access vector databases.
+- `EMBEDDING_PROVIDER=QWEN` is the production path; `LOCAL_HASH` is only for offline tests and development without model quota.
+- Agent tool execution is coordinated by Python through a tool registry; Java exposes stable APIs and logs calls.
+- Database Q&A supports MySQL, PostgreSQL, and Kingbase through JDBC, but still only permits read-only `SELECT`/`WITH` statements.
+
+- PostgreSQL and Kingbase database Q&A execution requires JDBC drivers and the same read-only SQL safety checks as MySQL. Real Kingbase execution tests use `AI_TEST_KINGBASE_JDBC_URL`, `AI_TEST_KINGBASE_USERNAME`, and `AI_TEST_KINGBASE_PASSWORD`; do not fake production credentials in repository files.
