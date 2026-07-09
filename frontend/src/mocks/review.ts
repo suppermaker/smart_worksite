@@ -1,8 +1,9 @@
-﻿import type { ReviewRecord, ReviewTemplate } from '../api/types';
+
+import type { ReviewRecord, ReviewTemplate } from '../api/types';
 
 export const mockReviewTemplates: ReviewTemplate[] = [
-  { id: 7001, templateId: 7001, projectId: 1001, taskId: 0, fileId: 4101, templateName: '安全专项方案', templateType: 'SAFETY_PLAN', status: 'ACTIVE', createdAt: '2026-07-01T09:00:00+08:00', updatedAt: '2026-07-04T09:00:00+08:00' },
-  { id: 7002, templateId: 7002, projectId: 1001, taskId: 0, fileId: 4102, templateName: '质量验收资料', templateType: 'QUALITY_ACCEPTANCE', status: 'ACTIVE', createdAt: '2026-07-01T09:10:00+08:00', updatedAt: '2026-07-04T09:10:00+08:00' }
+  { id: 7001, templateId: 7001, projectId: 1001, taskId: 0, fileId: 4101, templateName: '安全专项方案', templateType: 'SAFETY_REVIEW', status: 'ACTIVE', createdAt: '2026-07-01T09:00:00+08:00', updatedAt: '2026-07-04T09:00:00+08:00' },
+  { id: 7002, templateId: 7002, projectId: 1001, taskId: 0, fileId: 4102, templateName: '质量验收资料', templateType: 'QUALITY_REVIEW', status: 'ACTIVE', createdAt: '2026-07-01T09:10:00+08:00', updatedAt: '2026-07-04T09:10:00+08:00' }
 ];
 
 export const mockReviewRecord: ReviewRecord = {
