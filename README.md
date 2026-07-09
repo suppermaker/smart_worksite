@@ -1,4 +1,4 @@
-﻿# 智慧工地大模型应用系统
+# 智慧工地大模型应用系统
 
 智慧工地大模型应用系统面向建筑工地管理场景，提供项目资料管理、知识库管理、知识问答、合规审查、报告生成、OCR识别、任务编排、权限安全和审计追踪等能力。
 
@@ -189,6 +189,8 @@ mvn spring-boot:run
 ```
 
 后端默认地址：`http://localhost:8080`
+
+Local development default administrator: `admin / admin123`. Flyway migration `V8__reset_default_admin_password.sql` resets this password for local integration testing only; production deployments must reset it.
 
 ### 3. 启动前端
 

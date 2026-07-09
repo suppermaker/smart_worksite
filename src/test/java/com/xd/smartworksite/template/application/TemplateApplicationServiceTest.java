@@ -86,6 +86,14 @@ class TemplateApplicationServiceTest {
             @Override
             public void update(Project project) {
             }
+
+            @Override
+            public void softDelete(Long projectId, Long updatedBy) {
+            }
+
+            @Override
+            public void updateStatus(Long projectId, String status, Long updatedBy) {
+            }
         };
     }
 

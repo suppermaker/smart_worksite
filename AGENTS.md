@@ -140,6 +140,7 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - AI, RAG, OCR, Embedding, vector retrieval, and document-parsing integrations must be adapter-based; do not implement algorithm core logic in Java controllers or application services.
 - Long-running operations such as report generation, OCR recognition, knowledge indexing, and document parsing must use async tasks or status records instead of blocking HTTP requests for the whole job.
 - Logs must not print passwords, tokens, MinIO secrets, or production credentials.
+- Local development seeds `admin / admin123` through Flyway for interface testing only; production deployments must reset or disable the seeded administrator password.
 - Run `mvn test` after adding runnable functionality.
 
 ## Agent Rules

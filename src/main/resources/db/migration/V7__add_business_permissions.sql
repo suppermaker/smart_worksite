@@ -1,5 +1,5 @@
--- Add business-level permissions used by the frontend router
-INSERT INTO permission (permission_code, permission_name, permission_type, created_by, updated_by)
+-- Add business-level permissions used by the frontend router.
+INSERT IGNORE INTO permission (permission_code, permission_name, permission_type, created_by, updated_by)
 VALUES
   ('dashboard:view',        'Dashboard View',              'API', 1, 1),
   ('knowledge:view',        'Knowledge Base View',         'API', 1, 1),
@@ -10,7 +10,7 @@ VALUES
   ('system:user:manage',    'System User Management',      'API', 1, 1),
   ('project:member:manage', 'Project Member Management',   'API', 1, 1);
 
--- PLATFORM_ADMIN: all permissions (INSERT IGNORE skips already-existing pairs from V1)
+-- PLATFORM_ADMIN: all permissions.
 INSERT IGNORE INTO role_permission (role_id, permission_id, created_by, updated_by)
 SELECT 1, id, 1, 1 FROM permission
 WHERE permission_code IN (
@@ -18,7 +18,7 @@ WHERE permission_code IN (
   'system:user:manage','project:member:manage','system:manage','project:view','project:manage','file:manage'
 ) AND deleted = 0;
 
--- PROJECT_ADMIN: business + member management
+-- PROJECT_ADMIN: business + member management.
 INSERT IGNORE INTO role_permission (role_id, permission_id, created_by, updated_by)
 SELECT 2, id, 1, 1 FROM permission
 WHERE permission_code IN (
@@ -26,7 +26,7 @@ WHERE permission_code IN (
   'project:member:manage','project:view','file:manage'
 ) AND deleted = 0;
 
--- BUSINESS_USER: full business read/write, no admin
+-- BUSINESS_USER: full business read/write, no admin.
 INSERT IGNORE INTO role_permission (role_id, permission_id, created_by, updated_by)
 SELECT 3, id, 1, 1 FROM permission
 WHERE permission_code IN (
@@ -34,7 +34,7 @@ WHERE permission_code IN (
   'project:view','file:manage'
 ) AND deleted = 0;
 
--- VIEWER: read-only
+-- VIEWER: read-only.
 INSERT IGNORE INTO role_permission (role_id, permission_id, created_by, updated_by)
 SELECT 4, id, 1, 1 FROM permission
 WHERE permission_code IN (
