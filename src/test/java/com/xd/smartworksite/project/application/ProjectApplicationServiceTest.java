@@ -45,10 +45,10 @@ class ProjectApplicationServiceTest {
         InMemoryProjectRepository repository = new InMemoryProjectRepository();
         ProjectApplicationService service = new ProjectApplicationService(repository, new InMemoryProjectMemberMapper());
 
-        ProjectResponse response = service.createProject(createRequest("??????", "site-001"));
+        ProjectResponse response = service.createProject(createRequest("测试项目", "site-001"));
 
         assertThat(response.getProjectId()).isEqualTo(1L);
-        assertThat(response.getProjectName()).isEqualTo("??????");
+        assertThat(response.getProjectName()).isEqualTo("测试项目");
         assertThat(response.getProjectCode()).isEqualTo("SITE-001");
         assertThat(response.getStatus()).isEqualTo("ENABLED");
     }
@@ -57,9 +57,9 @@ class ProjectApplicationServiceTest {
     void createProjectRejectsDuplicateProjectCode() {
         InMemoryProjectRepository repository = new InMemoryProjectRepository();
         ProjectApplicationService service = new ProjectApplicationService(repository, new InMemoryProjectMemberMapper());
-        service.createProject(createRequest("??????", "SITE-001"));
+        service.createProject(createRequest("测试项目", "SITE-001"));
 
-        assertThatThrownBy(() -> service.createProject(createRequest("??????", "site-001")))
+        assertThatThrownBy(() -> service.createProject(createRequest("重复项目", "site-001")))
                 .isInstanceOfSatisfying(BusinessException.class, ex ->
                         assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode()));
     }
@@ -68,12 +68,12 @@ class ProjectApplicationServiceTest {
     void updateProjectSucceeds() {
         InMemoryProjectRepository repository = new InMemoryProjectRepository();
         ProjectApplicationService service = new ProjectApplicationService(repository, new InMemoryProjectMemberMapper());
-        ProjectResponse created = service.createProject(createRequest("??????", "SITE-001"));
-        ProjectUpdateRequest request = updateRequest("????????", "SITE-002");
+        ProjectResponse created = service.createProject(createRequest("测试项目", "SITE-001"));
+        ProjectUpdateRequest request = updateRequest("更新后项目", "SITE-002");
 
         ProjectResponse response = service.updateProject(created.getProjectId(), request);
 
-        assertThat(response.getProjectName()).isEqualTo("????????");
+        assertThat(response.getProjectName()).isEqualTo("更新后项目");
         assertThat(response.getProjectCode()).isEqualTo("SITE-002");
     }
 
@@ -81,7 +81,7 @@ class ProjectApplicationServiceTest {
     void updateProjectRejectsMissingProject() {
         ProjectApplicationService service = new ProjectApplicationService(new InMemoryProjectRepository(), new InMemoryProjectMemberMapper());
 
-        assertThatThrownBy(() -> service.updateProject(404L, updateRequest("?????", "NO-PROJECT")))
+        assertThatThrownBy(() -> service.updateProject(404L, updateRequest("缺失项目", "NO-PROJECT")))
                 .isInstanceOfSatisfying(BusinessException.class, ex ->
                         assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
     }
@@ -90,10 +90,10 @@ class ProjectApplicationServiceTest {
     void updateProjectRejectsProjectCodeOwnedByAnotherProject() {
         InMemoryProjectRepository repository = new InMemoryProjectRepository();
         ProjectApplicationService service = new ProjectApplicationService(repository, new InMemoryProjectMemberMapper());
-        ProjectResponse first = service.createProject(createRequest("??????", "SITE-001"));
-        service.createProject(createRequest("??????", "SITE-002"));
+        ProjectResponse first = service.createProject(createRequest("测试项目", "SITE-001"));
+        service.createProject(createRequest("项目二", "SITE-002"));
 
-        assertThatThrownBy(() -> service.updateProject(first.getProjectId(), updateRequest("??????", "SITE-002")))
+        assertThatThrownBy(() -> service.updateProject(first.getProjectId(), updateRequest("项目一", "SITE-002")))
                 .isInstanceOfSatisfying(BusinessException.class, ex ->
                         assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode()));
     }
@@ -102,8 +102,8 @@ class ProjectApplicationServiceTest {
         ProjectCreateRequest request = new ProjectCreateRequest();
         request.setProjectName(projectName);
         request.setProjectCode(projectCode);
-        request.setLocation("??");
-        request.setDescription("????");
+        request.setLocation("上海");
+        request.setDescription("测试描述");
         return request;
     }
 
@@ -111,8 +111,8 @@ class ProjectApplicationServiceTest {
         ProjectUpdateRequest request = new ProjectUpdateRequest();
         request.setProjectName(projectName);
         request.setProjectCode(projectCode);
-        request.setLocation("??");
-        request.setDescription("????????");
+        request.setLocation("上海");
+        request.setDescription("更新后的测试描述");
         return request;
     }
 

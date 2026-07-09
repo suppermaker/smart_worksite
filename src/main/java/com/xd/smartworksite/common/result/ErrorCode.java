@@ -2,15 +2,15 @@ package com.xd.smartworksite.common.result;
 
 public enum ErrorCode {
     SUCCESS(0, "success"),
-    PARAM_ERROR(40000, "????"),
-    UNAUTHORIZED(40100, "???"),
-    FORBIDDEN(40300, "???"),
-    NOT_FOUND(40400, "?????"),
-    CONFLICT(40900, "????"),
-    TOO_MANY_REQUESTS(42900, "????"),
-    SYSTEM_ERROR(50000, "????"),
-    EXTERNAL_SERVICE_ERROR(50200, "??????"),
-    SERVICE_UNAVAILABLE(50300, "?????");
+    PARAM_ERROR(40000, "参数错误"),
+    UNAUTHORIZED(40100, "未认证"),
+    FORBIDDEN(40300, "无权限"),
+    NOT_FOUND(40400, "资源不存在"),
+    CONFLICT(40900, "资源冲突"),
+    TOO_MANY_REQUESTS(42900, "请求过于频繁"),
+    SYSTEM_ERROR(50000, "系统错误"),
+    EXTERNAL_SERVICE_ERROR(50200, "外部服务异常"),
+    SERVICE_UNAVAILABLE(50300, "服务不可用");
 
     private final int code;
     private final String message;

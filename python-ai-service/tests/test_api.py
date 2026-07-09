@@ -1,4 +1,4 @@
-﻿import os
+import os
 os.environ["AI_SERVICE_API_KEY"] = ""
 os.environ["EMBEDDING_PROVIDER"] = "LOCAL_HASH"
 os.environ["RAG_PROVIDER"] = "LOCAL"
@@ -158,7 +158,7 @@ def test_database_summarize_result_fails_fast_when_qwen_fails(monkeypatch):
     monkeypatch.setattr(routes, "services", fake_services)
     client = TestClient(app, raise_server_exceptions=False)
     response = client.post("/v1/database/summarize-result", json={
-        "question": "????",
+        "question": "统计项目数量",
         "sql": "select 1",
         "columns": ["value"],
         "rows": [{"value": 1}],

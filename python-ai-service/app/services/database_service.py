@@ -36,14 +36,14 @@ class DatabaseQaService:
         ), usage
 
     async def summarize_result(self, request: DatabaseSummarizeRequest) -> tuple[DatabaseSummarizeData, dict]:
-        system = "????????????????SQL????????????JSON????summary?insights?warnings?"
+        system = "你是智慧工地数据库问答结果总结助手。请根据用户问题、SQL和查询结果返回JSON，字段为summary、insights、warnings。"
         prompt = request.model_dump()
         data, usage = await self.qwen.json_chat([
             Message(role="system", content=system),
             Message(role="user", content=json.dumps(prompt, ensure_ascii=False, default=str)),
         ])
         return DatabaseSummarizeData(
-            summary=str(data.get("summary", "??????")),
+            summary=str(data.get("summary", "暂无总结")),
             insights=data.get("insights") or [],
             warnings=data.get("warnings") or [],
         ), usage

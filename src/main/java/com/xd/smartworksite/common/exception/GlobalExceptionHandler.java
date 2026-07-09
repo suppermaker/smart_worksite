@@ -42,14 +42,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class, ConstraintViolationException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleValidationException(Exception ex) {
-        return ApiResponse.error(ErrorCode.PARAM_ERROR, "??????");
+        return ApiResponse.error(ErrorCode.PARAM_ERROR, "参数校验失败");
     }
 
     @ExceptionHandler(DataAccessException.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleDataAccessException(DataAccessException ex) {
         log.error("database error", ex);
-        return ApiResponse.error(ErrorCode.SYSTEM_ERROR, "???????");
+        return ApiResponse.error(ErrorCode.SYSTEM_ERROR, "数据库操作失败");
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

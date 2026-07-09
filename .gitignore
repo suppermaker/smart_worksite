@@ -62,3 +62,4 @@ python-ai-service/.coverage.*
 python-ai-service/htmlcov/
 python-ai-service/.mypy_cache/
 python-ai-service/.ruff_cache/
+docs/
