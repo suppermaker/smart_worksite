@@ -13,6 +13,10 @@ export const routes: RouteRecordRaw[] = [
     { path: 'report', name: 'report', component: () => import('../views/report/ReportListView.vue'), meta: { title: '报告管理', permission: 'report:view' } },
     { path: 'report/:id', name: 'reportDetail', component: () => import('../views/report/ReportDetailView.vue'), meta: { title: '报告详情', permission: 'report:view' } },
     { path: 'ocr', name: 'ocr', component: () => import('../views/ocr/OcrView.vue'), meta: { title: 'OCR识别', permission: 'ocr:view' } },
+    { path: 'project/manage', name: 'projectManage', component: () => import('../views/project/ProjectManageView.vue'), meta: { title: '项目管理', permission: 'project:manage' } },
+    { path: 'project/members', name: 'projectMembers', component: () => import('../views/project/ProjectMemberView.vue'), meta: { title: '项目成员', permission: 'project:member:manage' } },
+    { path: 'system/users', name: 'systemUsers', component: () => import('../views/system/UserManageView.vue'), meta: { title: '用户管理', permission: 'system:user:manage' } },
+    { path: 'system/roles', name: 'systemRoles', component: () => import('../views/system/RoleManageView.vue'), meta: { title: '角色权限', permission: 'system:user:manage' } },
     { path: '403', name: 'forbidden', component: () => import('../views/error/ForbiddenView.vue'), meta: { title: '无权限' } }
   ] },
   { path: '/:pathMatch(.*)*', name: 'notFound', component: () => import('../views/error/NotFoundView.vue'), meta: { public: true } }

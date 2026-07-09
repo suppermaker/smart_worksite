@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(netstat -ano)",
+      "Bash(findstr :8080)",
+      "Bash(tasklist:*)",
+      "Bash(powershell \"Get-Process -Id 4932 | Select-Object Id, ProcessName, MainWindowTitle\")",
+      "Bash(powershell \"Get-Service | Where-Object {$_.DisplayName -like '*MySQL*' -or $_.Name -like '*mysql*'}\")",
+      "Bash(powershell \"Get-NetTCPConnection -LocalPort 8080 -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess\")",
+      "Bash(powershell \"Get-Process -Id 4932\")",
+      "Bash(powershell \"Get-WmiObject Win32_Service | Where-Object {$_.ProcessId -eq 4932} | Select-Object Name, DisplayName, State\")",
+      "Bash(python3 -c \"import bcrypt; pw = b''admin123''; h = bcrypt.hashpw\\(pw, bcrypt.gensalt\\(10\\)\\); print\\(h.decode\\(\\)\\)\")",
+      "Bash(python -c \"import bcrypt; pw = b''admin123''; h = bcrypt.hashpw\\(pw, bcrypt.gensalt\\(10\\)\\); print\\(h.decode\\(\\)\\)\")",
+      "Bash(javac -cp \"/c/Users/Dream/.m2/repository/org/springframework/security/spring-security-crypto/5.7.8/spring-security-crypto-5.7.8.jar\" GenHash.java)",
+      "Bash(java -cp \".;/c/Users/Dream/.m2/repository/org/springframework/security/spring-security-crypto/5.7.8/spring-security-crypto-5.7.8.jar\" GenHash)",
+      "Bash(JAR=\"/c/Users/Dream/.m2/repository/org/springframework/security/spring-security-crypto/5.7.8/spring-security-crypto-5.7.8.jar\")",
+      "Bash(javac -cp \"$JAR\" GenHash.java)",
+      "Bash(java -cp \".:$JAR\" GenHash)",
+      "Bash(CRYPTO=\"E:/DevelopTools/apache-maven-3.9.9/repository/org/springframework/security/spring-security-crypto/6.3.6/spring-security-crypto-6.3.6.jar\")",
+      "Bash(javac -cp \"$CRYPTO\" GenHash.java)",
+      "Bash(java -cp \".;$CRYPTO\" GenHash)",
+      "Bash(tr ';' '\\\\n')",
+      "Bash(JCL=\"E:/DevelopTools/apache-maven-3.9.9/repository/org/springframework/spring-jcl/6.1.16/spring-jcl-6.1.16.jar\")",
+      "Bash(java -cp \".;$CRYPTO;$JCL\" GenHash)"
+    ]
+  }
+}

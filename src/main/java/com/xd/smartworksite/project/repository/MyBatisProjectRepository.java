@@ -41,4 +41,14 @@ public class MyBatisProjectRepository implements ProjectRepository {
     public void update(Project project) {
         projectMapper.update(project);
     }
+
+    @Override
+    public void softDelete(Long projectId, Long updatedBy) {
+        projectMapper.softDelete(projectId, updatedBy);
+    }
+
+    @Override
+    public void updateStatus(Long projectId, String status, Long updatedBy) {
+        projectMapper.updateStatus(projectId, status, updatedBy);
+    }
 }

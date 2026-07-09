@@ -27,7 +27,7 @@ type RequestInstance = Omit<AxiosInstance, 'get' | 'post' | 'put' | 'delete' | '
 };
 
 export const request = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 15000
 }) as RequestInstance;
 

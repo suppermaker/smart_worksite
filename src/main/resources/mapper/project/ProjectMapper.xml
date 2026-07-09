@@ -46,7 +46,7 @@
         insert into project (
             project_name, project_code, location, status, description, created_by, updated_by
         ) values (
-            #{projectName}, #{projectCode}, #{location}, #{status}, #{description}, 1, 1
+            #{projectName}, #{projectCode}, #{location}, #{status}, #{description}, #{createdBy}, #{updatedBy}
         )
     </insert>
 
@@ -56,8 +56,22 @@
             project_code = #{projectCode},
             location = #{location},
             description = #{description},
-            updated_by = 1
+            updated_by = #{updatedBy}
         where id = #{id}
+          and deleted = 0
+    </update>
+
+    <update id="softDelete">
+        update project
+        set deleted = 1, updated_by = #{updatedBy}
+        where id = #{projectId}
+          and deleted = 0
+    </update>
+
+    <update id="updateStatus">
+        update project
+        set status = #{status}, updated_by = #{updatedBy}
+        where id = #{projectId}
           and deleted = 0
     </update>
 </mapper>

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xd.smartworksite.auth.mapper.RoleMapper">
+
+    <resultMap id="RoleResultMap" type="com.xd.smartworksite.auth.domain.Role">
+        <id property="id" column="id"/>
+        <result property="roleCode" column="role_code"/>
+        <result property="roleName" column="role_name"/>
+        <result property="description" column="description"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="PermissionResultMap" type="com.xd.smartworksite.auth.domain.Permission">
+        <id property="id" column="id"/>
+        <result property="permissionCode" column="permission_code"/>
+        <result property="permissionName" column="permission_name"/>
+        <result property="permissionType" column="permission_type"/>
+        <result property="parentId" column="parent_id"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectAll" resultMap="RoleResultMap">
+        SELECT id, role_code, role_name, description, status, created_at, updated_at
+        FROM role
+        WHERE deleted = 0
+        <if test="keyword != null and keyword != ''">
+            AND (role_code LIKE CONCAT('%', #{keyword}, '%')
+                 OR role_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY id ASC
+    </select>
+
+    <select id="selectById" resultMap="RoleResultMap">
+        SELECT id, role_code, role_name, description, status, created_at, updated_at
+        FROM role WHERE id = #{roleId} AND deleted = 0
+    </select>
+
+    <select id="selectAllPermissions" resultMap="PermissionResultMap">
+        SELECT id, permission_code, permission_name, permission_type, parent_id, created_at, updated_at
+        FROM permission WHERE deleted = 0 ORDER BY id ASC
+    </select>
+
+    <select id="selectPermissionIdsByRoleId" resultType="java.lang.Long">
+        SELECT permission_id FROM role_permission WHERE role_id = #{roleId} AND deleted = 0
+    </select>
+
+    <insert id="insertRolePermission">
+        INSERT INTO role_permission (role_id, permission_id, created_by, updated_by)
+        VALUES (#{roleId}, #{permissionId}, #{operatorId}, #{operatorId})
+    </insert>
+
+    <update id="deleteRolePermissions">
+        UPDATE role_permission SET deleted = 1 WHERE role_id = #{roleId} AND deleted = 0
+    </update>
+
+    <select id="selectUserRoleCodes" resultType="string">
+        SELECT r.role_code FROM user_role ur
+        INNER JOIN role r ON ur.role_id = r.id AND r.deleted = 0
+        WHERE ur.user_id = #{userId} AND ur.deleted = 0
+    </select>
+
+    <insert id="insertUserRole">
+        INSERT INTO user_role (user_id, role_id, created_by, updated_by)
+        VALUES (#{userId}, #{roleId}, #{operatorId}, #{operatorId})
+    </insert>
+
+    <update id="deleteUserRoles">
+        UPDATE user_role SET deleted = 1 WHERE user_id = #{userId} AND deleted = 0
+    </update>
+</mapper>

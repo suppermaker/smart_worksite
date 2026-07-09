@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xd.smartworksite.auth.mapper.ProjectMemberMapper">
+
+    <resultMap id="MemberResultMap" type="com.xd.smartworksite.auth.domain.ProjectMember">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="projectRole" column="project_role"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="username" column="username"/>
+        <result property="displayName" column="display_name"/>
+    </resultMap>
+
+    <select id="selectByProjectId" resultMap="MemberResultMap">
+        SELECT pm.id, pm.project_id, pm.user_id, pm.project_role, pm.status, pm.created_at, pm.updated_at,
+               ua.username, ua.display_name
+        FROM project_member pm
+        INNER JOIN user_account ua ON pm.user_id = ua.id AND ua.deleted = 0
+        WHERE pm.project_id = #{projectId} AND pm.deleted = 0
+        ORDER BY pm.created_at ASC
+    </select>
+
+    <select id="selectByProjectIdAndUserId" resultMap="MemberResultMap">
+        SELECT pm.id, pm.project_id, pm.user_id, pm.project_role, pm.status, pm.created_at, pm.updated_at,
+               ua.username, ua.display_name
+        FROM project_member pm
+        INNER JOIN user_account ua ON pm.user_id = ua.id AND ua.deleted = 0
+        WHERE pm.project_id = #{projectId} AND pm.user_id = #{userId} AND pm.deleted = 0
+    </select>
+
+    <select id="countActiveMember" resultType="int">
+        SELECT COUNT(1) FROM project_member
+        WHERE project_id = #{projectId} AND user_id = #{userId} AND deleted = 0 AND status = 'ENABLED'
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO project_member (project_id, user_id, project_role, status, created_by, updated_by)
+        VALUES (#{projectId}, #{userId}, #{projectRole}, #{status}, #{userId}, #{userId})
+    </insert>
+
+    <update id="update">
+        UPDATE project_member
+        SET project_role = #{projectRole}, status = #{status}
+        WHERE project_id = #{projectId} AND user_id = #{userId} AND deleted = 0
+    </update>
+
+    <update id="deleteByProjectIdAndUserId">
+        UPDATE project_member SET deleted = 1, updated_by = #{operatorId}
+        WHERE project_id = #{projectId} AND user_id = #{userId} AND deleted = 0
+    </update>
+
+    <select id="selectProjectIdsByUserId" resultType="java.lang.Long">
+        SELECT project_id FROM project_member
+        WHERE user_id = #{userId} AND deleted = 0 AND status = 'ENABLED'
+    </select>
+</mapper>

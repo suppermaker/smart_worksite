@@ -16,4 +16,8 @@ public interface ProjectMapper {
     int insert(Project project);
 
     int update(Project project);
+
+    int softDelete(@Param("projectId") Long projectId, @Param("updatedBy") Long updatedBy);
+
+    int updateStatus(@Param("projectId") Long projectId, @Param("status") String status, @Param("updatedBy") Long updatedBy);
 }

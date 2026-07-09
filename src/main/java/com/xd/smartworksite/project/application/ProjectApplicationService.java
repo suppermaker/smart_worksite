@@ -5,12 +5,15 @@ import com.github.pagehelper.PageHelper;
 import com.xd.smartworksite.common.exception.BusinessException;
 import com.xd.smartworksite.common.result.ErrorCode;
 import com.xd.smartworksite.common.result.PageResult;
+import com.xd.smartworksite.common.security.SecurityUtils;
 import com.xd.smartworksite.project.domain.Project;
 import com.xd.smartworksite.project.dto.ProjectCreateRequest;
 import com.xd.smartworksite.project.dto.ProjectQueryRequest;
 import com.xd.smartworksite.project.dto.ProjectResponse;
 import com.xd.smartworksite.project.dto.ProjectUpdateRequest;
 import com.xd.smartworksite.project.repository.ProjectRepository;
+import com.xd.smartworksite.auth.domain.ProjectMember;
+import com.xd.smartworksite.auth.mapper.ProjectMemberMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,11 +24,15 @@ import java.util.Locale;
 public class ProjectApplicationService {
 
     private static final String PROJECT_STATUS_ENABLED = "ENABLED";
+    private static final String PROJECT_ROLE_ADMIN = "PROJECT_ADMIN";
 
     private final ProjectRepository projectRepository;
+    private final ProjectMemberMapper projectMemberMapper;
 
-    public ProjectApplicationService(ProjectRepository projectRepository) {
+    public ProjectApplicationService(ProjectRepository projectRepository,
+                                     ProjectMemberMapper projectMemberMapper) {
         this.projectRepository = projectRepository;
+        this.projectMemberMapper = projectMemberMapper;
     }
 
     public PageResult<ProjectResponse> queryProjects(ProjectQueryRequest request) {
@@ -44,19 +51,33 @@ public class ProjectApplicationService {
         String projectCode = normalizeProjectCode(request.getProjectCode());
         ensureProjectCodeAvailable(projectCode, null);
 
+        Long currentUserId = SecurityUtils.getCurrentUserId();
         Project project = new Project();
         project.setProjectName(normalizeRequiredText(request.getProjectName(), "projectName is required"));
         project.setProjectCode(projectCode);
         project.setLocation(trimToNull(request.getLocation()));
         project.setDescription(trimToNull(request.getDescription()));
         project.setStatus(PROJECT_STATUS_ENABLED);
+        project.setCreatedBy(currentUserId);
+        project.setUpdatedBy(currentUserId);
         projectRepository.insert(project);
+
+        // Auto-add creator as PROJECT_ADMIN member
+        ProjectMember member = new ProjectMember();
+        member.setProjectId(project.getId());
+        member.setUserId(currentUserId);
+        member.setProjectRole(PROJECT_ROLE_ADMIN);
+        member.setStatus(PROJECT_STATUS_ENABLED);
+        projectMemberMapper.insert(member);
+
         return getProject(project.getId());
     }
 
     @Transactional
     public ProjectResponse updateProject(Long projectId, ProjectUpdateRequest request) {
         Project project = requireProject(projectId);
+        checkProjectManagePermission(projectId);
+
         String projectCode = normalizeProjectCode(request.getProjectCode());
         ensureProjectCodeAvailable(projectCode, projectId);
 
@@ -64,8 +85,34 @@ public class ProjectApplicationService {
         project.setProjectCode(projectCode);
         project.setLocation(trimToNull(request.getLocation()));
         project.setDescription(trimToNull(request.getDescription()));
+        project.setUpdatedBy(SecurityUtils.getCurrentUserId());
         projectRepository.update(project);
         return getProject(projectId);
+    }
+
+    @Transactional
+    public void deleteProject(Long projectId) {
+        requireProject(projectId);
+        checkProjectManagePermission(projectId);
+        projectRepository.softDelete(projectId, SecurityUtils.getCurrentUserId());
+    }
+
+    @Transactional
+    public void updateProjectStatus(Long projectId, String status) {
+        requireProject(projectId);
+        checkProjectManagePermission(projectId);
+        projectRepository.updateStatus(projectId, status, SecurityUtils.getCurrentUserId());
+    }
+
+    private void checkProjectManagePermission(Long projectId) {
+        if (SecurityUtils.isPlatformAdmin()) {
+            return;
+        }
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        ProjectMember member = projectMemberMapper.selectByProjectIdAndUserId(projectId, currentUserId);
+        if (member == null || !PROJECT_ROLE_ADMIN.equals(member.getProjectRole())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "no permission to manage this project");
+        }
     }
 
     private Project requireProject(Long projectId) {

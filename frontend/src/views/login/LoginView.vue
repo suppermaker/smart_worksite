@@ -15,7 +15,7 @@ async function submit() {
   try {
     await userStore.login(form);
     ElMessage.success('登录成功');
-    router.replace((route.query.redirect as string) || '/dashboard');
+    await router.replace((route.query.redirect as string) || '/dashboard');
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '登录失败');
   } finally { loading.value = false; }
@@ -33,7 +33,7 @@ async function submit() {
         <el-form-item label="密码"><el-input v-model="form.password" type="password" show-password size="large" /></el-form-item>
         <el-button type="primary" size="large" :loading="loading" style="width:100%" @click="submit">登录</el-button>
       </el-form>
-      <div class="hint">开发阶段默认 mock 登录，后续联调 /api/auth/login。</div>
+      <div class="hint">默认账号：admin / admin123</div>
     </el-card>
   </div>
 </template>

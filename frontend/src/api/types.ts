@@ -40,16 +40,28 @@ export interface LoginResponse {
 }
 
 export interface ProjectItem {
-  id: ID;
   projectId: ID;
-  name: string;
-  code: string;
-  status: Status;
-  address: string;
-  taskId?: ID;
-  fileId?: ID;
+  projectName: string;
+  projectCode: string;
+  location?: string;
+  status: string;
+  description?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectCreateForm {
+  projectName: string;
+  projectCode: string;
+  location?: string;
+  description?: string;
+}
+
+export interface ProjectUpdateForm {
+  projectName: string;
+  projectCode: string;
+  location?: string;
+  description?: string;
 }
 
 export interface FileObject {
@@ -183,6 +195,65 @@ export interface ReportItem {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UserItem {
+  id: ID;
+  username: string;
+  displayName: string;
+  phone?: string;
+  email?: string;
+  status: string;
+  roles: string[];
+  lastLoginAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserCreateForm {
+  username: string;
+  password: string;
+  displayName: string;
+  phone?: string;
+  email?: string;
+  roleCodes?: string[];
+}
+
+export interface UserUpdateForm {
+  displayName: string;
+  phone?: string;
+  email?: string;
+  roleCodes?: string[];
+}
+
+export interface RoleItem {
+  id: ID;
+  roleCode: string;
+  roleName: string;
+  description?: string;
+  status: string;
+  permissionIds: ID[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PermissionItem {
+  id: ID;
+  permissionCode: string;
+  permissionName: string;
+  permissionType: string;
+  parentId?: ID;
+}
+
+export interface ProjectMemberItem {
+  id: ID;
+  projectId: ID;
+  userId: ID;
+  username: string;
+  displayName: string;
+  projectRole: string;
+  status: string;
+  createdAt: string;
 }
 
 export interface OcrField {

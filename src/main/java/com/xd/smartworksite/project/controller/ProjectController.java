@@ -3,14 +3,16 @@ package com.xd.smartworksite.project.controller;
 import com.xd.smartworksite.common.result.ApiResponse;
 import com.xd.smartworksite.common.result.PageResult;
 import com.xd.smartworksite.project.application.ProjectApplicationService;
+import com.xd.smartworksite.project.dto.ProjectCreateRequest;
 import com.xd.smartworksite.project.dto.ProjectQueryRequest;
 import com.xd.smartworksite.project.dto.ProjectResponse;
+import com.xd.smartworksite.project.dto.ProjectStatusRequest;
+import com.xd.smartworksite.project.dto.ProjectUpdateRequest;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
 
 @RestController
 @RequestMapping("/api/projects")
@@ -31,5 +33,33 @@ public class ProjectController {
     @GetMapping("/{projectId}")
     public ApiResponse<ProjectResponse> getProject(@PathVariable Long projectId) {
         return ApiResponse.success(projectApplicationService.getProject(projectId));
+    }
+
+    @PostMapping
+    @PreAuthorize("hasAuthority('project:manage')")
+    public ApiResponse<ProjectResponse> createProject(@Valid @RequestBody ProjectCreateRequest request) {
+        return ApiResponse.success(projectApplicationService.createProject(request));
+    }
+
+    @PutMapping("/{projectId}")
+    @PreAuthorize("hasAuthority('project:manage')")
+    public ApiResponse<ProjectResponse> updateProject(@PathVariable Long projectId,
+                                                      @Valid @RequestBody ProjectUpdateRequest request) {
+        return ApiResponse.success(projectApplicationService.updateProject(projectId, request));
+    }
+
+    @DeleteMapping("/{projectId}")
+    @PreAuthorize("hasAuthority('project:manage')")
+    public ApiResponse<Void> deleteProject(@PathVariable Long projectId) {
+        projectApplicationService.deleteProject(projectId);
+        return ApiResponse.success(null);
+    }
+
+    @PutMapping("/{projectId}/status")
+    @PreAuthorize("hasAuthority('project:manage')")
+    public ApiResponse<Void> updateProjectStatus(@PathVariable Long projectId,
+                                                 @Valid @RequestBody ProjectStatusRequest request) {
+        projectApplicationService.updateProjectStatus(projectId, request.getStatus());
+        return ApiResponse.success(null);
     }
 }

@@ -18,4 +18,8 @@ public final class RedisKeys {
     public static String queue(String name) {
         return PREFIX + ":queue:" + name;
     }
+
+    public static String tokenBlacklist(String jti) {
+        return PREFIX + ":auth:token-blacklist:" + jti;
+    }
 }

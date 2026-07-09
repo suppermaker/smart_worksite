@@ -2,7 +2,7 @@
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
-import { House, ChatLineRound, DocumentChecked, Files, Notebook, Picture, SwitchButton } from '@element-plus/icons-vue';
+import { House, ChatLineRound, DocumentChecked, Files, Notebook, Picture, SwitchButton, User, Setting, UserFilled, Folder } from '@element-plus/icons-vue';
 import { useProjectStore } from '../stores/project';
 import { useUserStore } from '../stores/user';
 
@@ -17,7 +17,11 @@ const menus = [
   { path: '/qa', title: '知识问答', icon: ChatLineRound, permission: 'qa:view' },
   { path: '/review', title: '合规审查', icon: DocumentChecked, permission: 'review:view' },
   { path: '/report', title: '报告管理', icon: Files, permission: 'report:view' },
-  { path: '/ocr', title: 'OCR识别', icon: Picture, permission: 'ocr:view' }
+  { path: '/ocr', title: 'OCR识别', icon: Picture, permission: 'ocr:view' },
+  { path: '/project/manage', title: '项目管理', icon: Folder, permission: 'project:manage' },
+  { path: '/project/members', title: '项目成员', icon: UserFilled, permission: 'project:member:manage' },
+  { path: '/system/users', title: '用户管理', icon: User, permission: 'system:user:manage' },
+  { path: '/system/roles', title: '角色权限', icon: Setting, permission: 'system:user:manage' }
 ];
 
 const visibleMenus = computed(() => menus.filter((item) => userStore.hasPermission(item.permission)));
@@ -47,12 +51,12 @@ async function logout() {
     <el-container>
       <el-header class="topbar" height="64px">
         <div>
-          <div class="current-project">当前项目：{{ currentProject?.name || '暂无项目' }}</div>
-          <div class="project-meta">{{ currentProject?.code || '-' }} · {{ currentProject?.address || '-' }}</div>
+          <div class="current-project">当前项目：{{ currentProject?.projectName || '暂无项目' }}</div>
+          <div class="project-meta">{{ currentProject?.projectCode || '-' }} · {{ currentProject?.location || '-' }}</div>
         </div>
         <div class="top-actions">
           <el-select v-model="projectStore.currentProjectId" style="width: 240px" :loading="projectStore.loading" @change="projectStore.switchProject">
-            <el-option v-for="project in projectStore.projects" :key="project.projectId" :label="project.name" :value="String(project.projectId)" :disabled="project.status !== 'ACTIVE'" />
+            <el-option v-for="project in projectStore.projects" :key="project.projectId" :label="project.projectName" :value="String(project.projectId)" :disabled="project.status !== 'ENABLED'" />
           </el-select>
           <el-dropdown><span class="user-chip">{{ userStore.displayName }} / {{ userStore.roles[0] || '业务人员' }}</span><template #dropdown><el-dropdown-menu><el-dropdown-item :icon="SwitchButton" @click="logout">退出登录</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
         </div>

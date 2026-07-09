@@ -16,4 +16,8 @@ public interface ProjectRepository {
     Project insert(Project project);
 
     void update(Project project);
+
+    void softDelete(Long projectId, Long updatedBy);
+
+    void updateStatus(Long projectId, String status, Long updatedBy);
 }
