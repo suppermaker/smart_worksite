@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xd.smartworksite.audit.mapper.AuditLogMapper">
+
+    <resultMap id="AuditLogResultMap" type="com.xd.smartworksite.audit.domain.AuditLog">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="operatorId" column="operator_id"/>
+        <result property="action" column="action"/>
+        <result property="objectType" column="object_type"/>
+        <result property="objectId" column="object_id"/>
+        <result property="requestId" column="request_id"/>
+        <result property="ipAddress" column="ip_address"/>
+        <result property="detail" column="detail"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into audit_log (
+            project_id, operator_id, action, object_type, object_id,
+            request_id, ip_address, detail, created_by, updated_by
+        ) values (
+            #{projectId}, #{operatorId}, #{action}, #{objectType}, #{objectId},
+            #{requestId}, #{ipAddress}, #{detail}, #{operatorId}, #{operatorId}
+        )
+    </insert>
+
+    <select id="selectPage" resultMap="AuditLogResultMap">
+        select id, project_id, operator_id, action, object_type, object_id,
+               request_id, ip_address, detail, created_at, updated_at
+        from audit_log
+        where deleted = 0
+        <if test="projectId != null">
+            and project_id = #{projectId}
+        </if>
+        <if test="projectId == null and accessibleProjectIds != null">
+            and project_id in
+            <foreach collection="accessibleProjectIds" item="projectIdItem" open="(" separator="," close=")">
+                #{projectIdItem}
+            </foreach>
+        </if>
+        <if test="operatorId != null">
+            and operator_id = #{operatorId}
+        </if>
+        <if test="action != null and action != ''">
+            and action = #{action}
+        </if>
+        <if test="objectType != null and objectType != ''">
+            and object_type = #{objectType}
+        </if>
+        <if test="createdFrom != null">
+            and created_at &gt;= #{createdFrom}
+        </if>
+        <if test="createdTo != null">
+            and created_at &lt;= #{createdTo}
+        </if>
+        order by created_at desc, id desc
+    </select>
+</mapper>

@@ -29,16 +29,14 @@ public class ReportTemplateController {
 
     @PostMapping
     public ApiResponse<TemplateResponse> uploadReportTemplate(@RequestParam Long projectId,
-                                                              @RequestParam(required = false) String templateName,
-                                                              @RequestParam(required = false) String templateType,
+                                                              @RequestParam String templateName,
+                                                              @RequestParam String templateType,
                                                               @RequestParam(required = false) String scenario,
                                                               @RequestParam(required = false) String versionNo,
                                                               @RequestParam(required = false) String description,
                                                               @RequestParam MultipartFile file) {
-        String resolvedName = templateName == null || templateName.isBlank() ? file.getOriginalFilename() : templateName;
-        String resolvedType = templateType == null || templateType.isBlank() ? "CRYPTO_EVALUATION_REPORT" : templateType;
         return ApiResponse.success(templateApplicationService.uploadTemplate(
-                projectId, TemplateCategory.REPORT.name(), resolvedName, resolvedType, scenario, versionNo, description, file));
+                projectId, TemplateCategory.REPORT.name(), templateName, templateType, scenario, versionNo, description, file));
     }
 
     @GetMapping

@@ -1,0 +1,41 @@
+package com.xd.smartworksite.qa.application;
+
+import com.xd.smartworksite.ai.application.AiApplicationService;
+import com.xd.smartworksite.ai.dto.DatabaseQueryRequest;
+import com.xd.smartworksite.ai.dto.DatabaseQueryResponse;
+import com.xd.smartworksite.ai.dto.ModelInvokeRequest;
+import com.xd.smartworksite.ai.dto.ModelInvokeResponse;
+import com.xd.smartworksite.ai.dto.RagSearchRequest;
+import com.xd.smartworksite.ai.dto.RagSearchResponse;
+import com.xd.smartworksite.ai.dto.RouteRequest;
+import com.xd.smartworksite.ai.dto.RouteResponse;
+import org.springframework.stereotype.Component;
+
+@Component
+public class AiApplicationQaGateway implements QaAiGateway {
+    private final AiApplicationService aiApplicationService;
+
+    public AiApplicationQaGateway(AiApplicationService aiApplicationService) {
+        this.aiApplicationService = aiApplicationService;
+    }
+
+    @Override
+    public RouteResponse route(RouteRequest request) {
+        return aiApplicationService.route(request);
+    }
+
+    @Override
+    public ModelInvokeResponse invokeModel(ModelInvokeRequest request) {
+        return aiApplicationService.invokeModel(request);
+    }
+
+    @Override
+    public RagSearchResponse searchKnowledge(RagSearchRequest request) {
+        return aiApplicationService.searchKnowledge(request);
+    }
+
+    @Override
+    public DatabaseQueryResponse queryDatabase(DatabaseQueryRequest request) {
+        return aiApplicationService.queryDatabase(request);
+    }
+}

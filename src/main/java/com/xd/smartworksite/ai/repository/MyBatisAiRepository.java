@@ -16,13 +16,13 @@ public class MyBatisAiRepository implements AiRepository {
     }
 
     @Override
-    public void saveExternalCallLog(ExternalCallLog log) {
-        aiMapper.insertExternalCallLog(log);
+    public int saveExternalCallLog(ExternalCallLog log) {
+        return aiMapper.insertExternalCallLog(log);
     }
 
     @Override
-    public List<ExternalCallLog> queryExternalCallLogs(Long projectId, String serviceName, String callType, String status) {
-        return aiMapper.selectExternalCallLogPage(projectId, serviceName, callType, status);
+    public List<ExternalCallLog> queryExternalCallLogs(Long projectId, List<Long> accessibleProjectIds, String serviceName, String callType, String status) {
+        return aiMapper.selectExternalCallLogPage(projectId, accessibleProjectIds, serviceName, callType, status);
     }
 
     @Override

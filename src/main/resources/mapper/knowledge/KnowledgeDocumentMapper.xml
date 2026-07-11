@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xd.smartworksite.knowledge.mapper.KnowledgeDocumentMapper">
+
+    <resultMap id="KnowledgeDocumentResultMap" type="com.xd.smartworksite.knowledge.domain.KnowledgeDocument">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="knowledgeBaseId" column="knowledge_base_id"/>
+        <result property="fileId" column="file_id"/>
+        <result property="title" column="title"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="indexStatus" column="index_status"/>
+        <result property="taskId" column="task_id"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="versionNo" column="version_no"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="updatedBy" column="updated_by"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="KnowledgeDocumentColumns">
+        id, project_id, knowledge_base_id, file_id, title, source_type, index_status,
+        task_id, error_message, version_no, created_by, updated_by, created_at, updated_at
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into knowledge_document (
+            project_id, knowledge_base_id, file_id, title, source_type, index_status,
+            version_no, created_by, updated_by
+        ) values (
+            #{projectId}, #{knowledgeBaseId}, #{fileId}, #{title}, #{sourceType}, #{indexStatus},
+            #{versionNo}, #{createdBy}, #{updatedBy}
+        )
+    </insert>
+
+    <select id="selectById" resultMap="KnowledgeDocumentResultMap">
+        select <include refid="KnowledgeDocumentColumns"/>
+        from knowledge_document
+        where id = #{documentId}
+          and deleted = 0
+    </select>
+
+    <select id="selectPage" resultMap="KnowledgeDocumentResultMap">
+        select <include refid="KnowledgeDocumentColumns"/>
+        from knowledge_document
+        where knowledge_base_id = #{knowledgeBaseId}
+          and deleted = 0
+        <if test="indexStatus != null and indexStatus != ''">
+            and index_status = #{indexStatus}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            and title like concat('%', #{keyword}, '%')
+        </if>
+        order by created_at desc, id desc
+    </select>
+
+    <update id="markIndexQueued">
+        update knowledge_document
+        set index_status = 'INDEXING',
+            task_id = #{taskId},
+            error_message = null,
+            updated_by = #{updatedBy}
+        where id = #{documentId}
+          and index_status in ('PENDING', 'FAILED')
+          and deleted = 0
+    </update>
+
+    <update id="markIndexing">
+        update knowledge_document
+        set index_status = 'INDEXING',
+            error_message = null,
+            updated_by = #{updatedBy}
+        where id = #{documentId}
+          and deleted = 0
+    </update>
+
+    <update id="markIndexSuccess">
+        update knowledge_document
+        set index_status = 'SUCCESS',
+            error_message = null,
+            updated_by = #{updatedBy}
+        where id = #{documentId}
+          and deleted = 0
+    </update>
+
+    <update id="markIndexFailed">
+        update knowledge_document
+        set index_status = 'FAILED',
+            error_message = #{errorMessage},
+            updated_by = #{updatedBy}
+        where id = #{documentId}
+          and deleted = 0
+    </update>
+
+    <update id="softDelete">
+        update knowledge_document
+        set deleted = 1, updated_by = #{updatedBy}
+        where id = #{documentId}
+          and deleted = 0
+    </update>
+</mapper>

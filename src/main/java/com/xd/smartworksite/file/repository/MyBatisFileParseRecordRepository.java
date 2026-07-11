@@ -17,8 +17,12 @@ public class MyBatisFileParseRecordRepository implements FileParseRecordReposito
     }
 
     @Override
-    public void insert(FileParseRecord record) {
-        fileParseRecordMapper.insert(record);
+    public FileParseRecord insert(FileParseRecord record) {
+        int inserted = fileParseRecordMapper.insert(record);
+        if (inserted <= 0 || record.getId() == null) {
+            throw new IllegalStateException("file parse record insert failed or id was not generated");
+        }
+        return record;
     }
 
     @Override

@@ -27,5 +27,7 @@ public interface UserAccountMapper {
 
     List<String> selectPermissionCodes(@Param("userId") Long userId);
 
+    List<String> selectPermissionCodesByType(@Param("userId") Long userId, @Param("permissionType") String permissionType);
+
     Long selectDefaultProjectId(@Param("userId") Long userId);
 }

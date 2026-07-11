@@ -10,17 +10,19 @@ public interface TemplateRepository {
 
     FileObjectRecord saveFileObject(FileObjectRecord fileObject);
 
-    void updateFileBizId(Long fileId, Long bizId);
+    Optional<FileObjectRecord> findFileObjectById(Long fileId);
+
+    int updateFileBizId(Long fileId, Long bizId);
 
     Template save(Template template);
 
     Optional<Template> findById(Long templateId);
 
-    List<Template> findPage(Long projectId, String templateCategory, String templateType, String status, String keyword);
+    List<Template> findPage(Long projectId, List<Long> accessibleProjectIds, String templateCategory, String templateType, String status, String keyword);
 
-    void update(Template template);
+    int update(Template template);
 
-    void updateStatus(Long templateId, String status);
+    int updateStatus(Long templateId, String status);
 
-    void delete(Long templateId);
+    int delete(Long templateId);
 }

@@ -83,11 +83,20 @@ public class AiPythonServiceClient {
             throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE,
                     "Python智能服务不可用: " + (lastError == null ? "unknown" : lastError.getMessage()));
         } catch (BusinessException ex) {
-            saveLog(projectId, callType, requestSummary, null, "FAILED", System.currentTimeMillis() - started, ex.getMessage());
+            try {
+                saveLog(projectId, callType, requestSummary, null, "FAILED", System.currentTimeMillis() - started, ex.getMessage());
+            } catch (BusinessException logEx) {
+                ex.addSuppressed(logEx);
+            }
             throw ex;
         } catch (Exception ex) {
-            saveLog(projectId, callType, requestSummary, null, "FAILED", System.currentTimeMillis() - started, ex.getMessage());
-            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Python智能服务调用异常: " + ex.getMessage());
+            BusinessException businessException = new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "Python智能服务调用异常: " + ex.getMessage());
+            try {
+                saveLog(projectId, callType, requestSummary, null, "FAILED", System.currentTimeMillis() - started, ex.getMessage());
+            } catch (BusinessException logEx) {
+                businessException.addSuppressed(logEx);
+            }
+            throw businessException;
         }
     }
 
@@ -112,10 +121,17 @@ public class AiPythonServiceClient {
             log.setStatus(status);
             log.setCostMs(costMs);
             log.setErrorMessage(limit(errorMessage, 2000));
-            aiRepository.saveExternalCallLog(log);
+            int inserted = aiRepository.saveExternalCallLog(log);
+            if (inserted <= 0 || log.getId() == null) {
+                throw new BusinessException(ErrorCode.CONFLICT, "external call log insert failed");
+            }
         } catch (Exception ex) {
             log.error("external call log persistence failed, projectId={}, callType={}, status={}, requestId={}",
                     projectId, callType, status, MDC.get(RequestContext.REQUEST_ID_MDC_KEY), ex);
+            if (ex instanceof BusinessException businessException) {
+                throw businessException;
+            }
+            throw new BusinessException(ErrorCode.CONFLICT, "external call log insert failed: " + ex.getMessage());
         }
     }
 

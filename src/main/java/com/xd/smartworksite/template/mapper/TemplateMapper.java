@@ -8,15 +8,18 @@ import java.util.List;
 
 public interface TemplateMapper {
 
-    void insertFileObject(FileObjectRecord fileObject);
+    int insertFileObject(FileObjectRecord fileObject);
 
-    void updateFileBizId(@Param("fileId") Long fileId, @Param("bizId") Long bizId);
+    FileObjectRecord selectFileObjectById(@Param("fileId") Long fileId);
 
-    void insertTemplate(Template template);
+    int updateFileBizId(@Param("fileId") Long fileId, @Param("bizId") Long bizId);
+
+    int insertTemplate(Template template);
 
     Template selectById(@Param("templateId") Long templateId);
 
     List<Template> selectPage(@Param("projectId") Long projectId,
+                              @Param("accessibleProjectIds") List<Long> accessibleProjectIds,
                               @Param("templateCategory") String templateCategory,
                               @Param("templateType") String templateType,
                               @Param("status") String status,

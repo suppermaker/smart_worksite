@@ -6,14 +6,12 @@ export const mockReviewTemplates: ReviewTemplate[] = [
 ];
 
 export const mockReviewRecord: ReviewRecord = {
-  id: 8001,
   recordId: 8001,
   projectId: 1001,
   taskId: 9401,
   fileId: 4201,
   templateId: 7001,
   status: 'PROCESSING',
-  progress: 72,
   issues: [
     { issueId: 'ISSUE-001', severity: 'HIGH', location: '第3章 3.2', ruleName: '安全措施完整性要求', description: '缺少深基坑监测频次和报警阈值。', suggestion: '补充深基坑监测频次、报警阈值和责任人。' },
     { issueId: 'ISSUE-002', severity: 'MEDIUM', location: '附件A', ruleName: '签章完整性要求', description: '缺少项目负责人签字页。', suggestion: '补齐项目负责人签字和日期。' }

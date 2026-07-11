@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8" ?>
+﻿<?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.xd.smartworksite.project.mapper.ProjectMapper">
 
@@ -9,12 +9,13 @@
         <result property="location" column="location"/>
         <result property="status" column="status"/>
         <result property="description" column="description"/>
+        <result property="settings" column="settings"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
     <sql id="ProjectColumns">
-        id, project_name, project_code, location, status, description, created_at, updated_at
+        id, project_name, project_code, location, status, description, settings, created_at, updated_at
     </sql>
 
     <select id="selectPage" resultMap="ProjectResultMap">
@@ -24,6 +25,27 @@
         <if test="keyword != null and keyword != ''">
             and (project_name like concat('%', #{keyword}, '%')
                  or project_code like concat('%', #{keyword}, '%'))
+        </if>
+        <if test="status != null and status != ''">
+            and status = #{status}
+        </if>
+        order by created_at desc, id desc
+    </select>
+
+    <select id="selectPageByProjectIds" resultMap="ProjectResultMap">
+        select <include refid="ProjectColumns"/>
+        from project
+        where deleted = 0
+          and id in
+          <foreach collection="projectIds" item="projectId" open="(" separator="," close=")">
+              #{projectId}
+          </foreach>
+        <if test="keyword != null and keyword != ''">
+            and (project_name like concat('%', #{keyword}, '%')
+                 or project_code like concat('%', #{keyword}, '%'))
+        </if>
+        <if test="status != null and status != ''">
+            and status = #{status}
         </if>
         order by created_at desc, id desc
     </select>
@@ -74,4 +96,68 @@
         where id = #{projectId}
           and deleted = 0
     </update>
+
+    <update id="updateSettings">
+        update project
+        set settings = #{settings}, updated_by = #{updatedBy}
+        where id = #{projectId}
+          and deleted = 0
+    </update>
+
+    <select id="countActiveMembers" resultType="long">
+        select count(1)
+        from project_member
+        where project_id = #{projectId}
+          and status = 'ENABLED'
+          and deleted = 0
+    </select>
+
+    <select id="countKnowledgeBases" resultType="long">
+        select count(1)
+        from knowledge_base
+        where project_id = #{projectId}
+          and deleted = 0
+    </select>
+
+    <select id="countReports" resultType="long">
+        select count(1)
+        from report
+        where project_id = #{projectId}
+          and deleted = 0
+    </select>
+
+    <select id="countDataSources" resultType="long">
+        select count(1)
+        from data_source
+        where project_id = #{projectId}
+          and deleted = 0
+    </select>
+
+    <select id="countQaMessages" resultType="long">
+        select count(1)
+        from qa_message
+        where project_id = #{projectId}
+          and deleted = 0
+    </select>
+
+    <select id="countReviewRecords" resultType="long">
+        select count(1)
+        from review_record
+        where project_id = #{projectId}
+          and deleted = 0
+    </select>
+
+    <select id="countOcrRecords" resultType="long">
+        select count(1)
+        from ocr_record
+        where project_id = #{projectId}
+          and deleted = 0
+    </select>
+
+    <select id="sumFileStorageBytes" resultType="long">
+        select coalesce(sum(file_size), 0)
+        from file_object
+        where project_id = #{projectId}
+          and deleted = 0
+    </select>
 </mapper>

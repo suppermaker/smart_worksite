@@ -1,0 +1,379 @@
+package com.xd.smartworksite.review.application;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.pagehelper.Page;
+import com.github.pagehelper.PageHelper;
+import com.xd.smartworksite.ai.dto.AgentInvokeRequest;
+import com.xd.smartworksite.ai.dto.AgentInvokeResponse;
+import com.xd.smartworksite.common.exception.BusinessException;
+import com.xd.smartworksite.common.result.ErrorCode;
+import com.xd.smartworksite.common.result.PageResult;
+import com.xd.smartworksite.common.security.SecurityUtils;
+import com.xd.smartworksite.file.application.FileObjectApplicationService;
+import com.xd.smartworksite.file.dto.FileObjectResponse;
+import com.xd.smartworksite.file.dto.FileUploadRequest;
+import com.xd.smartworksite.project.application.ProjectAccessApplicationService;
+import com.xd.smartworksite.review.domain.ReviewRecord;
+import com.xd.smartworksite.review.domain.ReviewStatus;
+import com.xd.smartworksite.review.dto.ReviewIssueUpdateRequest;
+import com.xd.smartworksite.review.dto.ReviewRecordQueryRequest;
+import com.xd.smartworksite.review.dto.ReviewRecordResponse;
+import com.xd.smartworksite.review.dto.ReviewSubmitRequest;
+import com.xd.smartworksite.review.repository.ReviewRecordRepository;
+import com.xd.smartworksite.template.application.TemplateApplicationService;
+import com.xd.smartworksite.template.dto.TemplateResponse;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+@Service
+public class ReviewApplicationService {
+    private static final int MAX_ERROR_LENGTH = 2000;
+
+    private final ReviewRecordRepository reviewRecordRepository;
+    private final ProjectAccessApplicationService projectAccessApplicationService;
+    private final FileObjectApplicationService fileObjectApplicationService;
+    private final TemplateApplicationService templateApplicationService;
+    private final ReviewAiGateway reviewAiGateway;
+    private final ObjectMapper objectMapper;
+
+    public ReviewApplicationService(ReviewRecordRepository reviewRecordRepository,
+                                    ProjectAccessApplicationService projectAccessApplicationService,
+                                    FileObjectApplicationService fileObjectApplicationService,
+                                    TemplateApplicationService templateApplicationService,
+                                    ReviewAiGateway reviewAiGateway,
+                                    ObjectMapper objectMapper) {
+        this.reviewRecordRepository = reviewRecordRepository;
+        this.projectAccessApplicationService = projectAccessApplicationService;
+        this.fileObjectApplicationService = fileObjectApplicationService;
+        this.templateApplicationService = templateApplicationService;
+        this.reviewAiGateway = reviewAiGateway;
+        this.objectMapper = objectMapper;
+    }
+
+    @Transactional
+    public ReviewRecordResponse submitReview(ReviewSubmitRequest request) {
+        projectAccessApplicationService.requireProjectWritableAccess(request.getProjectId());
+        TemplateResponse template = requireReviewTemplate(request.getProjectId(), request.getTemplateId());
+        FileUploadRequest uploadRequest = new FileUploadRequest();
+        uploadRequest.setProjectId(request.getProjectId());
+        uploadRequest.setBizType("REVIEW_DOC");
+        uploadRequest.setFile(request.getFile());
+        FileObjectResponse file = fileObjectApplicationService.upload(uploadRequest);
+
+        ReviewRecord record = new ReviewRecord();
+        record.setProjectId(request.getProjectId());
+        record.setTemplateId(template.getTemplateId());
+        record.setFileId(file.getFileId());
+        record.setStatus(ReviewStatus.PENDING.name());
+        record.setIssuesJson("[]");
+        record.setResultJson("{}");
+        record.setCreatedBy(SecurityUtils.getCurrentUserId());
+        record.setUpdatedBy(SecurityUtils.getCurrentUserId());
+        reviewRecordRepository.insert(record);
+        if (record.getId() == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "review record id was not generated");
+        }
+        reviewRecordRepository.findById(record.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SYSTEM_ERROR, "review record is not readable"));
+        executeReview(record.getId());
+        return getRecord(record.getId());
+    }
+
+    public PageResult<ReviewRecordResponse> queryRecords(ReviewRecordQueryRequest request) {
+        if (request.getProjectId() != null) {
+            projectAccessApplicationService.requireProjectAccess(request.getProjectId());
+        }
+        List<Long> accessibleProjectIds = request.getProjectId() == null && !SecurityUtils.isPlatformAdmin()
+                ? projectAccessApplicationService.currentUserAccessibleProjectIds()
+                : null;
+        if (request.getProjectId() == null && accessibleProjectIds != null && accessibleProjectIds.isEmpty()) {
+            return new PageResult<>(request.getPageNo(), request.getPageSize(), 0, List.of());
+        }
+        Page<ReviewRecord> page = PageHelper.startPage(request.getPageNo(), request.getPageSize())
+                .doSelectPage(() -> reviewRecordRepository.findPage(
+                        request.getProjectId(),
+                        accessibleProjectIds,
+                        request.getTemplateId(),
+                        normalizeStatus(request.getStatus())
+                ));
+        return new PageResult<>(
+                request.getPageNo(),
+                request.getPageSize(),
+                page.getTotal(),
+                page.getResult().stream().map(this::toResponse).toList()
+        );
+    }
+
+    public ReviewRecordResponse getRecord(Long recordId) {
+        return toResponse(requireRecordAccess(recordId));
+    }
+
+    @Transactional
+    public ReviewRecordResponse retry(Long recordId) {
+        ReviewRecord record = requireRecordWritableAccess(recordId);
+        if (!ReviewStatus.FAILED.name().equals(record.getStatus())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "only failed review records can be retried");
+        }
+        executeReview(recordId);
+        return getRecord(recordId);
+    }
+
+    @Transactional
+    public void delete(Long recordId) {
+        requireRecordWritableAccess(recordId);
+        int updated = reviewRecordRepository.softDelete(recordId, SecurityUtils.getCurrentUserId());
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.CONFLICT, "review record delete failed");
+        }
+    }
+
+    @Transactional
+    public ReviewRecordResponse archive(Long recordId) {
+        requireRecordWritableAccess(recordId);
+        int updated = reviewRecordRepository.archive(recordId, SecurityUtils.getCurrentUserId());
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.CONFLICT, "review record archive failed");
+        }
+        return getRecord(recordId);
+    }
+
+    @Transactional
+    public ReviewRecordResponse updateIssue(Long recordId, String issueId, ReviewIssueUpdateRequest request) {
+        ReviewRecord record = requireRecordWritableAccess(recordId);
+        if (!ReviewStatus.COMPLETED.name().equals(record.getStatus())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "only completed review record issues can be updated");
+        }
+        String normalizedIssueId = normalizeRequired(issueId, "issueId is required");
+        String normalizedStatus = normalizeIssueStatus(request.getStatus());
+        List<Map<String, Object>> issues = readList(record.getIssuesJson());
+        boolean found = false;
+        for (Map<String, Object> issue : issues) {
+            if (normalizedIssueId.equals(String.valueOf(issue.get("issueId")))) {
+                issue.put("status", normalizedStatus);
+                issue.put("comment", trimToNull(request.getComment()));
+                found = true;
+            }
+        }
+        if (!found) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "review issue not found");
+        }
+        Map<String, Object> result = readMap(record.getResultJson());
+        result.put("issues", issues);
+        int updated = reviewRecordRepository.markCompleted(recordId, writeJson(issues), writeJson(result), SecurityUtils.getCurrentUserId());
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.CONFLICT, "review issue update failed");
+        }
+        return getRecord(recordId);
+    }
+
+    @Transactional
+    public ReviewRecordResponse executeReview(Long recordId) {
+        ReviewRecord record = requireRecordWritableAccess(recordId);
+        int processing = reviewRecordRepository.markProcessing(recordId, SecurityUtils.getCurrentUserId());
+        if (processing == 0) {
+            throw new BusinessException(ErrorCode.CONFLICT, "review record state is not executable");
+        }
+        try {
+            TemplateResponse template = requireReviewTemplate(record.getProjectId(), record.getTemplateId());
+            FileObjectResponse file = fileObjectApplicationService.getFile(record.getFileId());
+            AgentInvokeResponse aiResponse = reviewAiGateway.invokeAgent(buildAgentRequest(record, template, file));
+            Map<String, Object> result = parseAgentResult(aiResponse);
+            result.put("providerTraceId", aiResponse.getProviderTraceId());
+            if (aiResponse.getSteps() != null && !aiResponse.getSteps().isEmpty()) {
+                result.put("steps", aiResponse.getSteps());
+            }
+            List<Map<String, Object>> issues = extractIssues(result);
+            int completed = reviewRecordRepository.markCompleted(recordId, writeJson(issues), writeJson(result), SecurityUtils.getCurrentUserId());
+            if (completed == 0) {
+                throw new BusinessException(ErrorCode.CONFLICT, "review record complete state changed");
+            }
+            return getRecord(recordId);
+        } catch (RuntimeException ex) {
+            int failed = reviewRecordRepository.markFailed(recordId, limitError(ex.getMessage()), SecurityUtils.getCurrentUserId());
+            if (failed == 0) {
+                throw new BusinessException(ErrorCode.CONFLICT, "review record failure state cannot be persisted: " + limitError(ex.getMessage()));
+            }
+            throw ex;
+        }
+    }
+
+    private AgentInvokeRequest buildAgentRequest(ReviewRecord record, TemplateResponse template, FileObjectResponse file) {
+        AgentInvokeRequest request = new AgentInvokeRequest();
+        request.setProjectId(record.getProjectId());
+        request.setGoal("COMPLIANCE_REVIEW");
+        request.setTools(List.of("document_parse", "compliance_rule_check"));
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("recordId", record.getId());
+        parameters.put("templateId", template.getTemplateId());
+        parameters.put("templateName", template.getTemplateName());
+        parameters.put("templateType", template.getTemplateType());
+        parameters.put("reviewFileId", file.getFileId());
+        parameters.put("reviewFileName", file.getFileName());
+        parameters.put("expectedResultSchema", Map.of(
+                "issues", "array of {issueId,severity,location,ruleName,description,suggestion,status}",
+                "summary", "string",
+                "score", "number"
+        ));
+        request.setParameters(parameters);
+        return request;
+    }
+
+    private Map<String, Object> parseAgentResult(AgentInvokeResponse response) {
+        if (response.getResult() == null || response.getResult().isBlank()) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "review agent returned empty result");
+        }
+        try {
+            return objectMapper.readValue(response.getResult(), new TypeReference<Map<String, Object>>() {});
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "review agent result must be valid JSON");
+        }
+    }
+
+    private List<Map<String, Object>> extractIssues(Map<String, Object> result) {
+        Object issuesValue = result.get("issues");
+        if (!(issuesValue instanceof List<?> rawIssues)) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "review agent result missing issues array");
+        }
+        List<Map<String, Object>> issues = new ArrayList<>();
+        for (Object rawIssue : rawIssues) {
+            if (!(rawIssue instanceof Map<?, ?> rawMap)) {
+                throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "review issue must be object");
+            }
+            Map<String, Object> issue = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+                issue.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+            if (!issue.containsKey("issueId") || String.valueOf(issue.get("issueId")).isBlank()) {
+                throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "review issue missing issueId");
+            }
+            issue.putIfAbsent("status", "OPEN");
+            issues.add(issue);
+        }
+        return issues;
+    }
+
+    private TemplateResponse requireReviewTemplate(Long projectId, Long templateId) {
+        TemplateResponse template = templateApplicationService.getTemplate(templateId);
+        if (!projectId.equals(template.getProjectId())) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "review template does not belong to project");
+        }
+        if (!"REVIEW".equals(template.getTemplateCategory())) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "template is not a review template");
+        }
+        if (!"ENABLED".equals(template.getStatus())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "review template is not enabled");
+        }
+        return template;
+    }
+
+    private ReviewRecord requireRecordAccess(Long recordId) {
+        if (recordId == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "recordId is required");
+        }
+        ReviewRecord record = reviewRecordRepository.findById(recordId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "review record not found"));
+        projectAccessApplicationService.requireProjectAccess(record.getProjectId());
+        return record;
+    }
+
+    private ReviewRecord requireRecordWritableAccess(Long recordId) {
+        ReviewRecord record = requireRecordAccess(recordId);
+        projectAccessApplicationService.requireProjectWritableAccess(record.getProjectId());
+        return record;
+    }
+
+    private String normalizeStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        try {
+            return ReviewStatus.valueOf(status.trim().toUpperCase(Locale.ROOT)).name();
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "status must be PENDING, PROCESSING, COMPLETED, FAILED or ARCHIVED");
+        }
+    }
+
+    private String normalizeIssueStatus(String status) {
+        String normalized = normalizeRequired(status, "status is required").toUpperCase(Locale.ROOT);
+        if (!List.of("OPEN", "PROCESSING", "RESOLVED", "IGNORED").contains(normalized)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "issue status must be OPEN, PROCESSING, RESOLVED or IGNORED");
+        }
+        return normalized;
+    }
+
+    private String normalizeRequired(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, message);
+        }
+        return value.trim();
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private ReviewRecordResponse toResponse(ReviewRecord record) {
+        ReviewRecordResponse response = new ReviewRecordResponse();
+        response.setRecordId(record.getId());
+        response.setProjectId(record.getProjectId());
+        response.setTemplateId(record.getTemplateId());
+        response.setFileId(record.getFileId());
+        response.setTaskId(record.getTaskId());
+        response.setStatus(record.getStatus());
+        response.setIssues(readList(record.getIssuesJson()));
+        response.setResult(readMap(record.getResultJson()));
+        response.setErrorMessage(record.getErrorMessage());
+        response.setCreatedAt(record.getCreatedAt());
+        response.setUpdatedAt(record.getUpdatedAt());
+        return response;
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "review json serialization failed");
+        }
+    }
+
+    private List<Map<String, Object>> readList(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "review issues json parse failed");
+        }
+    }
+
+    private Map<String, Object> readMap(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "review result json parse failed");
+        }
+    }
+
+    private String limitError(String errorMessage) {
+        if (errorMessage == null || errorMessage.isBlank()) {
+            return "review execution failed";
+        }
+        String trimmed = errorMessage.trim();
+        return trimmed.length() <= MAX_ERROR_LENGTH ? trimmed : trimmed.substring(0, MAX_ERROR_LENGTH);
+    }
+}

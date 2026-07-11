@@ -7,7 +7,7 @@ import java.util.Optional;
 
 public interface FileParseRecordRepository {
 
-    void insert(FileParseRecord record);
+    FileParseRecord insert(FileParseRecord record);
 
     Optional<FileParseRecord> findById(Long recordId);
 

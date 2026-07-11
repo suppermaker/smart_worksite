@@ -22,4 +22,12 @@ public final class RedisKeys {
     public static String tokenBlacklist(String jti) {
         return PREFIX + ":auth:token-blacklist:" + jti;
     }
+
+    public static String loginFailureCount(String username) {
+        return PREFIX + ":auth:login-failure:" + username;
+    }
+
+    public static String loginLock(String username) {
+        return PREFIX + ":auth:login-lock:" + username;
+    }
 }

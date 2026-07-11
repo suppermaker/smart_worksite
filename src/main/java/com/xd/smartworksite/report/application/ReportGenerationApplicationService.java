@@ -8,9 +8,10 @@ import com.github.pagehelper.PageHelper;
 import com.xd.smartworksite.common.exception.BusinessException;
 import com.xd.smartworksite.common.result.ErrorCode;
 import com.xd.smartworksite.common.result.PageResult;
+import com.xd.smartworksite.common.security.SecurityUtils;
 import com.xd.smartworksite.file.infra.StorageAdapter;
 import com.xd.smartworksite.file.infra.StorageObject;
-import com.xd.smartworksite.project.repository.ProjectRepository;
+import com.xd.smartworksite.project.application.ProjectAccessApplicationService;
 import com.xd.smartworksite.report.domain.GenerateTask;
 import com.xd.smartworksite.report.domain.Report;
 import com.xd.smartworksite.report.domain.ReportConfig;
@@ -27,6 +28,7 @@ import com.xd.smartworksite.report.infra.CryptoAgentV3ReportClient;
 import com.xd.smartworksite.report.infra.GeneratedFilePayload;
 import com.xd.smartworksite.report.infra.ReferenceDocumentPayload;
 import com.xd.smartworksite.report.repository.ReportRepository;
+import com.xd.smartworksite.task.application.TaskOutboxApplicationService;
 import com.xd.smartworksite.template.domain.FileObjectRecord;
 import com.xd.smartworksite.template.domain.Template;
 import com.xd.smartworksite.template.domain.TemplateCategory;
@@ -60,17 +62,16 @@ public class ReportGenerationApplicationService {
     private static final String TASK_TYPE_REPORT_GENERATION = "REPORT_GENERATION";
     private static final String BIZ_TYPE_REPORT = "REPORT";
     private static final String TASK_STATUS_PENDING = "PENDING";
+    private static final String TASK_STATUS_QUEUED = "QUEUED";
     private static final String TASK_STATUS_PROCESSING = "RUNNING";
-    private static final String TASK_STATUS_SUCCESS = "SUCCESS";
-    private static final String TASK_STATUS_FAILED = "FAILED";
     private static final String TASK_STAGE_CONFIG_VALIDATE = "CONFIG_VALIDATE";
     private static final String TASK_STAGE_CRYPTO_AGENT_GENERATION = "CRYPTO_AGENT_GENERATION";
-    private static final String TASK_STAGE_REPORT_FILE_SAVE = "REPORT_FILE_SAVE";
     private static final String FILE_STATUS_ACTIVE = "ACTIVE";
 
     private final ReportRepository reportRepository;
-    private final ProjectRepository projectRepository;
+    private final ProjectAccessApplicationService projectAccessApplicationService;
     private final TemplateRepository templateRepository;
+    private final TaskOutboxApplicationService taskOutboxApplicationService;
     private final StorageAdapter storageAdapter;
     private final CryptoAgentV3ReportClient cryptoAgentV3ReportClient;
     private final ObjectMapper objectMapper;
@@ -80,54 +81,58 @@ public class ReportGenerationApplicationService {
             .build();
 
     public ReportGenerationApplicationService(ReportRepository reportRepository,
-                                              ProjectRepository projectRepository,
+                                              ProjectAccessApplicationService projectAccessApplicationService,
                                               TemplateRepository templateRepository,
+                                              TaskOutboxApplicationService taskOutboxApplicationService,
                                               StorageAdapter storageAdapter,
                                               CryptoAgentV3ReportClient cryptoAgentV3ReportClient,
                                               ObjectMapper objectMapper) {
         this.reportRepository = reportRepository;
-        this.projectRepository = projectRepository;
+        this.projectAccessApplicationService = projectAccessApplicationService;
         this.templateRepository = templateRepository;
+        this.taskOutboxApplicationService = taskOutboxApplicationService;
         this.storageAdapter = storageAdapter;
         this.cryptoAgentV3ReportClient = cryptoAgentV3ReportClient;
         this.objectMapper = objectMapper;
     }
 
+    @Transactional
     public ReportCreateResponse createReport(ReportCreateRequest request) {
-        requireProject(request.getProjectId());
+        projectAccessApplicationService.requireProjectWritableAccess(request.getProjectId());
         String reportType = normalizeRequired(request.getReportType(), "报告类型不能为空");
         Long templateId = request.getTemplateId();
         if (templateId != null) {
             validateReportTemplate(templateId, request.getProjectId());
         }
 
-        String reportName = request.getReportName();
-        if (reportName == null || reportName.isBlank()) {
-            reportName = reportType + "报告";
-        }
+        String reportName = normalizeRequired(request.getReportName(), "报告名称不能为空");
 
-        ReportConfig config = saveConfig(request, reportType, reportName.trim(), templateId);
-        Report report = saveReport(request, reportType, reportName.trim(), templateId, config.getId());
+        ReportConfig config = saveConfig(request, reportType, reportName, templateId);
+        Report report = saveReport(request, reportType, reportName, templateId, config.getId());
         GenerateTask task = saveTask(request.getProjectId(), report.getId());
-        reportRepository.updateReportTask(report.getId(), task.getId());
-        reportRepository.updateTaskBizId(task.getId(), report.getId());
+        requireUpdated(reportRepository.updateReportTask(report.getId(), task.getId()), "report task link update failed");
+        requireUpdated(reportRepository.updateTaskBizId(task.getId(), report.getId()), "task biz id update failed");
+        requireUpdated(reportRepository.updateTaskStatus(task.getId(), TASK_STATUS_QUEUED, TASK_STAGE_CONFIG_VALIDATE, null), "task queued status update failed");
+        task.setStatus("QUEUED");
+        taskOutboxApplicationService.enqueueTask(toSharedTask(task), "report created");
 
-        try {
-            executeCryptoAgentGeneration(report, config, task);
-            return new ReportCreateResponse(report.getId(), task.getId(), ReportStatus.COMPLETED.name());
-        } catch (BusinessException ex) {
-            markFailed(report.getId(), task.getId(), ex.getMessage());
-            return new ReportCreateResponse(report.getId(), task.getId(), ReportStatus.FAILED.name());
-        } catch (RuntimeException ex) {
-            markFailed(report.getId(), task.getId(), ex.getMessage());
-            return new ReportCreateResponse(report.getId(), task.getId(), ReportStatus.FAILED.name());
-        }
+        return new ReportCreateResponse(report.getId(), task.getId(), ReportStatus.PENDING.name());
     }
 
     public PageResult<ReportResponse> queryReports(ReportQueryRequest request) {
+        if (request.getProjectId() != null) {
+            projectAccessApplicationService.requireProjectAccess(request.getProjectId());
+        }
+        List<Long> accessibleProjectIds = request.getProjectId() == null && !SecurityUtils.isPlatformAdmin()
+                ? projectAccessApplicationService.currentUserAccessibleProjectIds()
+                : null;
+        if (request.getProjectId() == null && accessibleProjectIds != null && accessibleProjectIds.isEmpty()) {
+            return new PageResult<>(request.getPageNo(), request.getPageSize(), 0, List.of());
+        }
         Page<Report> page = PageHelper.startPage(request.getPageNo(), request.getPageSize())
                 .doSelectPage(() -> reportRepository.findReportPage(
                         request.getProjectId(),
+                        accessibleProjectIds,
                         trimToNull(request.getReportType()),
                         normalizeOptional(request.getStatus()),
                         trimToNull(request.getKeyword())
@@ -139,12 +144,14 @@ public class ReportGenerationApplicationService {
     public ReportResponse getReport(Long reportId) {
         Report report = reportRepository.findReportById(reportId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "报告不存在"));
+        projectAccessApplicationService.requireProjectAccess(report.getProjectId());
         return toResponse(report);
     }
 
     public ReportCreateResponse regenerateReport(Long reportId) {
         Report report = reportRepository.findReportById(reportId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "报告不存在"));
+        projectAccessApplicationService.requireProjectWritableAccess(report.getProjectId());
         ReportConfig config = reportRepository.findConfigById(report.getConfigId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "报告生成配置不存在"));
         ReportCreateRequest request = new ReportCreateRequest();
@@ -159,7 +166,35 @@ public class ReportGenerationApplicationService {
         return createReport(request);
     }
 
+    public void executeReportTask(Long reportId, Long taskId) {
+        Report report = reportRepository.findReportById(reportId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "报告不存在"));
+        projectAccessApplicationService.requireProjectWritableForSystem(report.getProjectId());
+        ReportConfig config = reportRepository.findConfigById(report.getConfigId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "报告生成配置不存在"));
+        GenerateTask task = new GenerateTask();
+        task.setId(taskId);
+        task.setProjectId(report.getProjectId());
+        task.setBizType(BIZ_TYPE_REPORT);
+        task.setBizId(reportId);
+        try {
+            executeCryptoAgentGeneration(report, config, task);
+        } catch (BusinessException ex) {
+            if (ErrorCode.CONFLICT.getCode() == ex.getCode()) {
+                throw ex;
+            }
+            markReportFailed(report.getId(), ex.getMessage());
+            throw ex;
+        } catch (RuntimeException ex) {
+            markReportFailed(report.getId(), ex.getMessage());
+            throw ex;
+        }
+    }
+
     public String createDownloadUrl(Long reportId, String format) {
+        Report report = reportRepository.findReportById(reportId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "报告不存在"));
+        projectAccessApplicationService.requireProjectAccess(report.getProjectId());
         String normalizedFormat = format == null || format.isBlank() ? "WORD" : format.trim().toUpperCase(Locale.ROOT);
         if (!"WORD".equals(normalizedFormat)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "当前版本尚未生成PDF报告");
@@ -192,7 +227,7 @@ public class ReportGenerationApplicationService {
         report.setReportType(reportType);
         report.setTemplateId(templateId);
         report.setEngineType(ReportEngineType.CRYPTO_AGENT_V3.name());
-        report.setStatus(ReportStatus.GENERATING.name());
+        report.setStatus(ReportStatus.PENDING.name());
         report.setProgress(0);
         return reportRepository.saveReport(report);
     }
@@ -209,9 +244,20 @@ public class ReportGenerationApplicationService {
         return reportRepository.saveTask(task);
     }
 
+    private com.xd.smartworksite.task.domain.GenerateTask toSharedTask(GenerateTask task) {
+        com.xd.smartworksite.task.domain.GenerateTask sharedTask = new com.xd.smartworksite.task.domain.GenerateTask();
+        sharedTask.setId(task.getId());
+        sharedTask.setProjectId(task.getProjectId());
+        sharedTask.setTaskType(task.getTaskType());
+        sharedTask.setBizType(task.getBizType());
+        sharedTask.setBizId(task.getBizId());
+        sharedTask.setStatus(task.getStatus());
+        return sharedTask;
+    }
+
     private void executeCryptoAgentGeneration(Report report, ReportConfig config, GenerateTask task) {
-        reportRepository.updateReportProcessing(report.getId(), ReportStatus.GENERATING.name(), 20, TASK_STAGE_CRYPTO_AGENT_GENERATION);
-        reportRepository.updateTaskStatus(task.getId(), TASK_STATUS_PROCESSING, TASK_STAGE_CRYPTO_AGENT_GENERATION, null);
+        requireUpdated(reportRepository.updateReportProcessing(report.getId(), ReportStatus.PROCESSING.name(), 20, TASK_STAGE_CRYPTO_AGENT_GENERATION), "report processing status update failed");
+        requireUpdated(reportRepository.updateTaskStatus(task.getId(), TASK_STATUS_PROCESSING, TASK_STAGE_CRYPTO_AGENT_GENERATION, null), "task processing status update failed");
 
         List<ReferenceDocumentPayload> referenceDocuments = buildReferenceDocuments(config);
         validateReferenceDocuments(referenceDocuments);
@@ -228,9 +274,9 @@ public class ReportGenerationApplicationService {
         }
 
         GeneratedFilePayload docx = selectDocx(response);
+        normalizeRequired(docx.getFileName(), "CryptoAgentV3返回文件名不能为空");
         ReportVersion version = saveVersion(report, config, response, null, null);
-        reportRepository.updateReportSuccess(report.getId(), version.getId(), ReportStatus.COMPLETED.name(), 100, docx.getDownloadRef());
-        reportRepository.updateTaskStatus(task.getId(), TASK_STATUS_SUCCESS, "FINISH", null);
+        requireUpdated(reportRepository.updateReportSuccess(report.getId(), version.getId(), ReportStatus.COMPLETED.name(), 100, docx.getDownloadRef()), "report success status update failed");
     }
 
     private List<ReferenceDocumentPayload> buildReferenceDocuments(ReportConfig config) {
@@ -239,7 +285,9 @@ public class ReportGenerationApplicationService {
             return explicitDocuments;
         }
         List<Long> fileIds = parseLongList(config.getReferenceFileIds());
-        List<ReferenceDocumentPayload> documents = fileIds.stream().map(this::loadTextReferenceDocument).toList();
+        List<ReferenceDocumentPayload> documents = fileIds.stream()
+                .map(fileId -> loadTextReferenceDocument(fileId, config.getProjectId()))
+                .toList();
         if (documents.isEmpty()) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "CryptoAgentV3要求至少提供一个参考文档内容");
         }
@@ -286,9 +334,12 @@ public class ReportGenerationApplicationService {
         return templateVariables;
     }
 
-    private ReferenceDocumentPayload loadTextReferenceDocument(Long fileId) {
+    private ReferenceDocumentPayload loadTextReferenceDocument(Long fileId, Long projectId) {
         FileObjectRecord file = reportRepository.findFileObjectById(fileId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "参考文件不存在: " + fileId));
+        if (!projectId.equals(file.getProjectId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "参考文件不属于当前项目: " + fileId);
+        }
         if (!isTextFile(file)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR,
                     "当前阶段只能从文本类参考文件读取内容，请在generationParams.referenceDocuments中提供已解析文本: " + file.getFileName());
@@ -364,9 +415,9 @@ public class ReportGenerationApplicationService {
         Long wordFileId = saveGeneratedWord(report, generatedFile, reportBytes);
         if (report.getCurrentVersionId() == null) {
             ReportVersion version = saveVersion(report, null, null, wordFileId, reportBytes);
-            reportRepository.updateReportSuccess(report.getId(), version.getId(), ReportStatus.COMPLETED.name(), 100, report.getPreviewUrl());
+            requireUpdated(reportRepository.updateReportSuccess(report.getId(), version.getId(), ReportStatus.COMPLETED.name(), 100, report.getPreviewUrl()), "report success status update failed");
         } else {
-            reportRepository.updateVersionWordFile(report.getCurrentVersionId(), wordFileId, sha256(reportBytes));
+            requireUpdated(reportRepository.updateVersionWordFile(report.getCurrentVersionId(), wordFileId, sha256(reportBytes)), "report version word file update failed");
         }
         FileObjectRecord file = reportRepository.findFileObjectById(wordFileId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "报告文件记录不存在"));
@@ -374,9 +425,7 @@ public class ReportGenerationApplicationService {
     }
 
     private Long saveGeneratedWord(Report report, GeneratedFilePayload generatedFile, byte[] bytes) {
-        String filename = generatedFile.getFileName() == null || generatedFile.getFileName().isBlank()
-                ? "report-" + report.getId() + ".docx"
-                : generatedFile.getFileName();
+        String filename = normalizeRequired(generatedFile.getFileName(), "CryptoAgentV3返回文件名不能为空");
         String objectName = "reports/project-" + report.getProjectId() + "/report-" + report.getId() + "/"
                 + LocalDate.now() + "/" + UUID.randomUUID() + ".docx";
         StorageObject object = storageAdapter.upload(objectName, new ByteArrayInputStream(bytes), bytes.length,
@@ -393,6 +442,9 @@ public class ReportGenerationApplicationService {
         fileObject.setStatus("ACTIVE");
         fileObject.setMetadata("{}");
         reportRepository.saveFileObject(fileObject);
+        if (fileObject.getId() == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "report file object id was not generated");
+        }
         return fileObject.getId();
     }
 
@@ -416,21 +468,21 @@ public class ReportGenerationApplicationService {
         version.setContentHash(reportBytes == null ? null : sha256(reportBytes));
         version.setStatus("SUCCESS");
         reportRepository.saveVersion(version);
+        if (version.getId() == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "report version id was not generated");
+        }
         return version;
     }
 
-    private void markFailed(Long reportId, Long taskId, String message) {
+    private void markReportFailed(Long reportId, String message) {
         String errorMessage = message == null || message.isBlank() ? "报告生成失败" : message;
-        reportRepository.updateReportFailed(reportId, ReportStatus.FAILED.name(), errorMessage);
-        reportRepository.updateTaskStatus(taskId, TASK_STATUS_FAILED, TASK_STAGE_CRYPTO_AGENT_GENERATION, errorMessage);
+        requireUpdated(reportRepository.updateReportFailed(reportId, ReportStatus.FAILED.name(), errorMessage), "report failed status update failed");
     }
 
-    private void requireProject(Long projectId) {
-        if (projectId == null) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "项目ID不能为空");
+    private void requireUpdated(int updated, String message) {
+        if (updated <= 0) {
+            throw new BusinessException(ErrorCode.CONFLICT, message);
         }
-        projectRepository.findById(projectId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "项目不存在"));
     }
 
     private void validateReportTemplate(Long templateId, Long projectId) {
@@ -480,7 +532,12 @@ public class ReportGenerationApplicationService {
         if (value == null || value.isBlank()) {
             return null;
         }
-        return value.trim().toUpperCase(Locale.ROOT);
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        try {
+            return ReportStatus.valueOf(normalized).name();
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "status must be DRAFT, PENDING, PROCESSING, COMPLETED, FAILED, ARCHIVED or DELETED");
+        }
     }
 
     private String trimToNull(String value) {

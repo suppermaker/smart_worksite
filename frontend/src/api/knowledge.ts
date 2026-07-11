@@ -6,24 +6,25 @@ const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
 export async function fetchKnowledgeBases(projectId: ID) {
   if (useMock) return mockKnowledgeBases.filter((item) => String(item.projectId) === String(projectId));
-  return request.get<KnowledgeBase[]>(`/projects/${projectId}/knowledge-bases`);
+  const page = await request.get<PageResult<KnowledgeBase>>(`/projects/${projectId}/knowledge-bases`);
+  return page.records;
 }
 
-export async function createKnowledgeBase(projectId: ID, data: Pick<KnowledgeBase, 'name' | 'description'>) {
-  if (useMock) return { ...mockKnowledgeBases[0], ...data, id: Date.now(), projectId } satisfies KnowledgeBase;
+export async function createKnowledgeBase(projectId: ID, data: Pick<KnowledgeBase, 'name' | 'description' | 'domain'>) {
+  if (useMock) return { ...mockKnowledgeBases[0], ...data, knowledgeBaseId: Date.now(), projectId } satisfies KnowledgeBase;
   return request.post<KnowledgeBase>(`/projects/${projectId}/knowledge-bases`, data);
 }
 
 export async function uploadKnowledgeDocument(knowledgeBaseId: ID, file: File) {
-  if (useMock) return { ...mockKnowledgeDocuments[0], id: Date.now(), knowledgeBaseId, fileName: file.name } satisfies KnowledgeDocument;
+  if (useMock) return { ...mockKnowledgeDocuments[0], documentId: Date.now(), knowledgeBaseId, title: file.name } satisfies KnowledgeDocument;
   const form = new FormData();
   form.append('file', file);
   return request.post<KnowledgeDocument>(`/knowledge-bases/${knowledgeBaseId}/documents`, form);
 }
 
 export async function triggerDocumentIndex(documentId: ID) {
-  if (useMock) return { taskId: 9202, status: 'PROCESSING' };
-  return request.post<{ taskId: ID; status: string }>(`/knowledge-documents/${documentId}/index`);
+  if (useMock) return { ...mockKnowledgeDocuments[0], documentId, indexStatus: 'QUEUED' } satisfies KnowledgeDocument;
+  return request.post<KnowledgeDocument>(`/knowledge-documents/${documentId}/index`);
 }
 
 export async function fetchKnowledgeDocuments(knowledgeBaseId: ID, params: PageQuery = {}) {

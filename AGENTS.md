@@ -1,4 +1,4 @@
-# AGENTS.md
+﻿# AGENTS.md
 
 This file describes collaboration rules for the Smart Worksite backend. Read `README.md` first for the project overview, startup steps, and module list.
 
@@ -65,6 +65,10 @@ Integration boundaries:
 - Java backend integrates Python intelligent algorithm services through REST APIs or internal service interfaces.
 - Large models, OCR engines, vector databases, business databases, and object storage are not directly exposed to the frontend. Qwen API keys must be configured only in `python-ai-service/`; Java calls the Python service and must not call Qwen directly for the AI adapter module.
 - Cross-service calls must record request summary, response summary, elapsed time, status, and error information.
+- Audit log writes must check affected rows and generated IDs; audit actions must not be reported as recorded if the audit row cannot be persisted.
+- AI external call logs must check affected rows and generated IDs. If log persistence fails after a Python-service failure, preserve the original service error and attach the log failure for diagnosis; successful AI calls must not return success when their required external-call log cannot be persisted.
+- System dependency health checks must be observable: report each dependency status and error reason instead of throwing a generic failure or hiding unavailable infrastructure.
+- Project create, update, delete, status, and settings changes must record operation audit logs with project ID, operator ID, action, object type, object ID, request ID, IP, and detail JSON.
 
 ## Local Dependencies
 
@@ -88,14 +92,14 @@ Main modules:
 - `project`: worksite projects, members, and project isolation foundation.
 - `file`: file metadata, upload/download, parsing records, and MinIO adapter.
 - `template`: report/review/common template metadata and file binding.
-- `knowledge`: knowledge bases, documents, indexing status, and retrieval-facing metadata.
-- `datasource`: business data source configuration and database Q&A foundations.
-- `qa`: Q&A sessions, answers, citations, feedback, and model/RAG integration records.
-- `review`: compliance templates, review tasks, issue lists, suggestions, and JSON results.
+- `knowledge`: knowledge base CRUD, project isolation, documents, indexing status, and retrieval-facing metadata.
+- `datasource`: business data source configuration, project isolation, encrypted password metadata, and database Q&A foundations.
+- `qa`: Q&A sessions, messages, answer references, feedback, project isolation, and model/RAG/database QA integration through the AI adapter.
+- `review`: compliance templates, review records, AI Agent review execution, issue lists, suggestions, issue handling status, and JSON results.
 - `report`: report templates, records, versions, downloads, and CryptoAgentV3 integration.
 - `ocr`: OCR records, recognition types, structured fields, and result JSON.
-- `task`: async tasks, statuses, retries, cancellation, timeouts, and stage logs.
-- `audit`: operation audit logs, access logs, model calls, retrieval logs, OCR calls, and external call logs.
+- `task`: async task query, status statistics, retries, cancellation requests, runtime leases, outbox foundation, and stage logs.
+- `audit`: operation audit log persistence/query APIs, project operation tracing, access logs, model calls, retrieval logs, OCR calls, and external call logs.
 - `ai`: Java intelligent capability adapter for Python AI services, including model/Agent calls, RAG search, routing, context preparation, safe database Q&A, and external call logs.
 
 Business modules may use these layers as needed: `controller`, `application`, `domain`, `repository`, `mapper`, `dto`, `infra`.
@@ -112,6 +116,31 @@ Business modules may use these layers as needed: `controller`, `application`, `d
 - Controllers must not directly call mappers, Redis, MinIO, or external services.
 - Modules must not directly call another module's mapper.
 - Cross-module collaboration should go through the other module's application service or facade.
+- Project-scoped reads and writes should use `project.application.ProjectAccessApplicationService` for project existence, member access, and project administrator checks.
+- Project-scoped write operations must use `requireProjectWritableAccess` or `requireProjectWritableManage`; `DISABLED` or `ARCHIVED` projects are read-only except status changes back to `ENABLED`.
+- Project settings updates must validate referenced default knowledge bases and report templates against same-project ownership, enabled status, and template category; do not persist dangling or cross-project default IDs.
+- Report generation must validate `referenceFileIds` against the report project before reading file content; cross-project references must fail visibly and mark report generation failed.
+- Report list queries must respect project isolation: platform administrators may query across projects without member-project filters, while non-admin users without a requested project must be restricted to their accessible project IDs or receive an empty page when none are accessible.
+- Project-scoped list/statistics queries that accept optional `projectId` must use the same isolation rule: platform administrators pass no member-project filter for cross-project queries; non-admin users must be constrained to accessible project IDs and receive an empty result when none are accessible.
+- Template list filters must validate enum values fail-fast: `templateCategory` only accepts `REVIEW` or `REPORT`, and `status` only accepts `ENABLED` or `DISABLED`; invalid filters must return parameter errors instead of silently querying empty results.
+- User management status filters and status updates must validate enum values fail-fast: user `status` only accepts `ENABLED` or `DISABLED`; invalid values must not be persisted or silently query empty results.
+- Built-in roles `PLATFORM_ADMIN`, `PROJECT_ADMIN`, `BUSINESS_USER`, and `VIEWER` are seed-level security contracts; they must not be edited, disabled, deleted, or reassigned permissions through role management APIs.
+- Project settings live in `project.settings` JSON and are exposed through project application services; modules should read project defaults through the project module instead of duplicating default configuration rules.
+- Data source passwords must be stored as `AES_GCM:` ciphertext using `AI_DATA_SOURCE_PASSWORD_KEY`; API responses must never return password ciphertext or raw passwords.
+- Data source connection tests and schema inspection must use real JDBC connections with decrypted credentials. Do not return fake connectivity success or mock schema metadata in production code.
+- Data source create APIs must read back the persisted record before success; update, enable, disable, and delete operations must check affected rows and fail visibly on stale or missing records.
+- QA APIs must call the AI adapter/Python service for generated answers. Do not create fake answers, canned fallback text, or silent success when model, RAG, or database QA calls fail.
+- QA message requests must validate `knowledgeBaseIds` and `dataSourceIds` before calling AI: each referenced knowledge base or data source must exist, belong to the QA session project, and be `ENABLED`; cross-project or disabled references must fail fast.
+- QA message creation and answer persistence must be observable: inserted message IDs must be usable, answer updates must check affected rows, and failed persistence must return conflict instead of reporting a successful AI answer.
+- Review APIs must call the AI adapter/Python Agent for compliance results. Do not create fake issue lists, default pass results, or silent success when the Agent returns empty, invalid, or failed results. Persist failed review records with observable error details.
+- Review execution failure handling must check failed-state persistence; if a failed review record cannot be marked `FAILED` with error details, return a conflict instead of losing observability.
+- Review submit APIs must read back the inserted review record before calling the Agent; missing generated IDs or unreadable records must fail before external AI execution.
+- Report generation must check affected rows for report/task state transitions, including report-task linking, task status, processing, success, failed, and version file binding. Zero-row updates must fail with conflict instead of returning fake success.
+- Knowledge base updates must check database affected rows; zero-row updates mean the record was concurrently changed or missing and must return a conflict instead of silently succeeding.
+- Knowledge document uploads must verify generated IDs and read back inserted records before returning success; missing IDs or unreadable inserts must fail before any indexing work starts.
+- Knowledge document indexing must create `KNOWLEDGE_INDEXING` async tasks and call Python RAG indexing through the AI adapter. Java may only orchestrate task state, parse-content loading, project isolation, and error recording; it must not access vector databases, run embeddings, or mark success when parsing or Python indexing fails.
+- Knowledge indexing state transitions to `INDEXING`, `SUCCESS`, and `FAILED` must check affected rows. If failure-state persistence itself fails, the worker must fail visibly with the original error included instead of losing observability.
+- OCR module implementation is owned outside this workstream; do not add or refactor OCR business code unless the user explicitly reassigns it.
 
 ## Responses And Exceptions
 
@@ -129,6 +158,7 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - Tables with project-scoped data must include `project_id`.
 - SQL should filter `deleted = 0` by default.
 - Business data uses logical delete by default.
+- JSON columns should receive application-validated JSON strings through MyBatis parameters; avoid mapper-level `CAST(? AS JSON)` patterns that can fail with prepared statements or dialect differences.
 
 ## Coding Rules
 
@@ -137,11 +167,28 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - Response objects are named `XxxResponse`; do not return sensitive database fields.
 - Do not put business decisions in controllers or MyBatis XML.
 - External service calls must define timeout, error mapping, retry/timeout policy where applicable, and call logging.
+- Template uploads must require explicit `templateName`, `templateType`, and a non-blank original filename; storage upload failures must return visible errors and must not generate default filenames or fallback template metadata.
+- Report template variable APIs must read the persisted template file and parse real placeholders; missing files, unsupported formats, empty content, or storage read failures must fail visibly instead of returning fake empty variable lists.
+- Template create APIs must read back the persisted template before success; update, enable, disable, and delete operations must check affected rows and fail visibly on stale or missing records.
+- File uploads must require a non-blank original filename; do not silently replace missing filenames with generic names such as `file`.
+- File upload and parse-task creation must read back persisted records before returning success; if records are not readable, fail visibly and clean up uploaded storage objects where applicable.
 - AI, RAG, OCR, Embedding, vector retrieval, and document-parsing integrations must be adapter-based; do not implement algorithm core logic in Java controllers or application services.
-- Long-running operations such as report generation, OCR recognition, knowledge indexing, and document parsing must use async tasks or status records instead of blocking HTTP requests for the whole job.
+- Long-running operations such as report generation, OCR recognition, knowledge indexing, and document parsing must use async tasks or status records instead of blocking HTTP requests for the whole job. Task status values are `PENDING`, `QUEUED`, `RUNNING`, `SUCCESS`, `FAILED`, `RETRYING`, and `CANCELED`.
+- Report creation APIs must return the created report in `PENDING` state and create a `QUEUED` task after writing `task_outbox`; actual CryptoAgentV3 execution belongs to the worker path and must re-check project writability before calling the external service. If CryptoAgentV3 is unavailable, tests may use fake clients, but production code must fail visibly and record task/report errors instead of falling back silently.
+- Report creation requires explicit `reportName`; do not derive a default report name from `reportType`. CryptoAgentV3 generated DOCX payloads must include a non-blank filename; blank filenames must fail the task visibly instead of creating fallback file names.
+- Task retry and cancel APIs must fail fast on stale or invalid states. Retrying is allowed only for `FAILED` tasks within the retry limit. Canceling terminal tasks must return a conflict instead of silently succeeding. Running tasks record `cancel_requested=true` and must be stopped by the worker cooperatively.
+- Task stage logs and task outbox events must check insert affected rows and generated IDs where applicable. State transitions must not be reported as successful if their trace or durable outbox record cannot be persisted.
+- Authentication and authorization management writes must check affected rows for user updates, password changes, role changes, role-permission links, project member changes, and last-login updates. Missing write effects must fail with conflict instead of silent success.
+- P0 create/update paths must check affected rows or generated IDs for project records and creator members, file objects and parse records, template files/templates and file business-ID binding, report configs/reports/tasks/output files/versions, and review records. APIs that return persisted data must read back the row before success.
+- Task queue delivery must use MySQL `task_outbox` as the durable source of truth. Redis is a delivery channel only; delivery failures must record error details, retry counters, and the next delivery time instead of being swallowed.
+- Task workers must claim `QUEUED` tasks before execution, verify the target project is still writable, write `worker_id`, `lease_until`, and heartbeat timestamps, and complete tasks with owner checks. Stale, canceled, or non-owner completions must fail fast with conflict. Invalid Redis queue messages must be rejected with observable logs before claiming tasks.
+- Login failure counters and temporary account locks must use Redis keys under `RedisKeys`; corrupted counters must fail fast instead of being silently reset.
+- JWT authentication must re-check the current user record on each request; disabled or deleted users must not be authenticated by stale tokens.
 - Logs must not print passwords, tokens, MinIO secrets, or production credentials.
 - Local development seeds `admin / admin123` through Flyway for interface testing only; production deployments must reset or disable the seeded administrator password.
 - Run `mvn test` after adding runnable functionality.
+- P0 backend validation must keep the following gates green: `mvn clean test`, frontend `npm run build` when frontend contracts change, documentation encoding guard, non-OCR route coverage against README and interface docs, frontend non-OCR API route matching, and OCR backend diff check.
+- Contract tests such as `MigrationContractTest` and `SecurityUtilsTest` are part of the backend foundation; do not delete or weaken them to make unrelated changes pass.
 
 ## Agent Rules
 
@@ -173,6 +220,7 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - Every page must handle loading, empty, and error states.
 - Long-running tasks such as report generation, OCR recognition, and knowledge indexing must show status, progress, or stage logs.
 - AI results should expose traceable information where available, such as sources, confidence, raw JSON, or document references.
+- Frontend report-template upload APIs must pass explicit `templateName` and `templateType`; do not derive them from the filename or rely on backend fallback metadata.
 
 ## Frontend UI Style
 
@@ -198,7 +246,7 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 
 ## Advanced AI Adapter Rules
 
-- RAG indexing must use the Python service: document chunking, embedding, vector storage, retrieval, and rerank belong in `python-ai-service/`.
+- RAG indexing must use the Python service: document chunking, embedding, vector storage, retrieval, and rerank belong in `python-ai-service/`. Java knowledge indexing must require existing successful file parse content; missing, blank, or unavailable parse content must fail visibly and record the document error.
 - Supported vector providers are `LOCAL`, `PGVECTOR`, and `MILVUS`; Java must not directly access vector databases.
 - `EMBEDDING_PROVIDER=QWEN` is the production path; `LOCAL_HASH` is only for offline tests and development without model quota.
 - Agent tool execution is coordinated by Python through a tool registry; Java exposes stable APIs and logs calls.

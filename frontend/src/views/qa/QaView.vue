@@ -12,8 +12,13 @@ const error = ref('');
 const question = ref('临边洞口防护有哪些验收要点？');
 const sessions = ref<QaSession[]>([]);
 const activeSessionId = ref<string | number>('');
-const messages = ref<QaMessage[]>([]);
+type ChatMessage = QaMessage & { role: 'user' | 'assistant'; content: string };
+const messages = ref<ChatMessage[]>([]);
 const references = ref<QaMessage['references']>([]);
+
+function toAssistantMessage(message: QaMessage): ChatMessage {
+  return { ...message, role: 'assistant', content: message.answer || '' };
+}
 
 async function loadData() {
   loading.value = true;
@@ -23,7 +28,7 @@ async function loadData() {
     sessions.value = await fetchQaSessions(projectStore.currentProject?.projectId || 0);
     if (!sessions.value.length) sessions.value = [await createQaSession({ projectId: projectStore.currentProject?.projectId || 0, title: '默认会话' })];
     activeSessionId.value = sessions.value[0].sessionId;
-    messages.value = await fetchQaMessages(activeSessionId.value);
+    messages.value = (await fetchQaMessages(activeSessionId.value)).map(toAssistantMessage);
     references.value = messages.value.find((item) => item.references?.length)?.references || [];
   } catch (err) {
     error.value = err instanceof Error ? err.message : '问答数据加载失败';
@@ -35,10 +40,10 @@ async function ask() {
   loading.value = true;
   error.value = '';
   try {
-    const userMessage: QaMessage = { id: Date.now(), messageId: Date.now(), sessionId: activeSessionId.value, projectId: projectStore.currentProject?.projectId || 0, taskId: 0, fileId: 0, role: 'user', content: question.value, question: question.value, status: 'SUCCESS', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const userMessage: ChatMessage = { messageId: Date.now(), sessionId: activeSessionId.value, projectId: projectStore.currentProject?.projectId || 0, role: 'user', content: question.value, question: question.value, status: 'SUCCESS', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     messages.value.push(userMessage);
     const answer = await sendQuestion(activeSessionId.value, { projectId: projectStore.currentProject?.projectId || 0, question: question.value, routeMode: 'MIXED' });
-    messages.value.push(answer);
+    messages.value.push(toAssistantMessage(answer));
     references.value = answer.references || [];
     question.value = '';
   } catch (err) {

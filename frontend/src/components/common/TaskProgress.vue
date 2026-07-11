@@ -3,7 +3,9 @@ import { computed } from 'vue';
 import type { TaskStageLog } from '../../api/types';
 
 const props = defineProps<{ percentage: number; status?: string; logs?: Array<string | TaskStageLog> }>();
-const timeline = computed(() => (props.logs || []).map((log) => typeof log === 'string' ? { message: log, stageName: log, createdAt: '' } : log));
+const timeline = computed(() => (props.logs || []).map((log) => typeof log === 'string'
+  ? { message: log, stageName: log, createdAt: '' }
+  : { message: log.errorMessage || log.outputSummary || log.inputSummary || '', stageName: log.stageCode, createdAt: log.createdAt }));
 </script>
 
 <template>

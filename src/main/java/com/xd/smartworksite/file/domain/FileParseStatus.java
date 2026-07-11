@@ -3,7 +3,7 @@ package com.xd.smartworksite.file.domain;
 public enum FileParseStatus {
     PENDING,
     RUNNING,
-    SUCCEEDED,
+    SUCCESS,
     FAILED,
     CANCELED
 }

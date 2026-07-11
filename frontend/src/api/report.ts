@@ -4,11 +4,16 @@ import type { ID, PageQuery, PageResult, ReportItem } from './types';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
-export async function uploadReportTemplate(file: File, projectId: ID) {
-  if (useMock) return { templateId: Date.now(), projectId, fileId: 4300, status: 'SUCCESS' };
+export async function uploadReportTemplate(data: { projectId: ID; templateName: string; templateType: string; file: File; scenario?: string; versionNo?: string; description?: string }) {
+  if (useMock) return { templateId: Date.now(), projectId: data.projectId, fileId: 4300, status: 'SUCCESS' };
   const form = new FormData();
-  form.append('projectId', String(projectId));
-  form.append('file', file);
+  form.append('projectId', String(data.projectId));
+  form.append('templateName', data.templateName);
+  form.append('templateType', data.templateType);
+  if (data.scenario) form.append('scenario', data.scenario);
+  if (data.versionNo) form.append('versionNo', data.versionNo);
+  if (data.description) form.append('description', data.description);
+  form.append('file', data.file);
   return request.post('/report/templates', form);
 }
 
@@ -17,7 +22,7 @@ export async function fetchReportTemplateVariables(templateId: ID) {
   return request.get(`/report/templates/${templateId}/variables`);
 }
 
-export async function createReport(data: { projectId: ID; reportType: string; templateId: ID; knowledgeBaseIds?: ID[]; dataSourceIds?: ID[]; referenceFileIds?: ID[]; variables?: Record<string, unknown> }) {
+export async function createReport(data: { projectId: ID; reportName: string; reportType: string; templateId: ID; knowledgeBaseIds?: ID[]; dataSourceIds?: ID[]; referenceFileIds?: ID[]; variables?: Record<string, unknown> }) {
   if (useMock) return { reportId: 10003, taskId: 9503, status: 'PROCESSING' };
   return request.post<{ reportId: ID; taskId: ID; status: string }>('/reports', data);
 }

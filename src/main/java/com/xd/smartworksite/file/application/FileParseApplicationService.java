@@ -15,6 +15,7 @@ import com.xd.smartworksite.file.dto.FileParseRequest;
 import com.xd.smartworksite.file.infra.StorageAdapter;
 import com.xd.smartworksite.file.repository.FileObjectRepository;
 import com.xd.smartworksite.file.repository.FileParseRecordRepository;
+import com.xd.smartworksite.project.application.ProjectAccessApplicationService;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -42,19 +43,22 @@ public class FileParseApplicationService {
     private final StorageAdapter storageAdapter;
     private final FileProperties fileProperties;
     private final ObjectMapper objectMapper;
+    private final ProjectAccessApplicationService projectAccessApplicationService;
 
     public FileParseApplicationService(FileObjectRepository fileObjectRepository,
                                        FileParseRecordRepository fileParseRecordRepository,
                                        FileParseWorker fileParseWorker,
                                        StorageAdapter storageAdapter,
                                        FileProperties fileProperties,
-                                       ObjectMapper objectMapper) {
+                                       ObjectMapper objectMapper,
+                                       ProjectAccessApplicationService projectAccessApplicationService) {
         this.fileObjectRepository = fileObjectRepository;
         this.fileParseRecordRepository = fileParseRecordRepository;
         this.fileParseWorker = fileParseWorker;
         this.storageAdapter = storageAdapter;
         this.fileProperties = fileProperties;
         this.objectMapper = objectMapper;
+        this.projectAccessApplicationService = projectAccessApplicationService;
     }
 
     public FileParseRecordResponse createParse(Long fileId, FileParseRequest request) {
@@ -91,8 +95,13 @@ public class FileParseApplicationService {
         record.setCurrentStage(FileParseStage.CREATED.name());
         record.setMetadata(buildCreateMetadata(request));
         fileParseRecordRepository.insert(record);
+        if (record.getId() == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "file parse record id was not generated");
+        }
         fileParseWorker.parseAsync(record.getId());
-        return fileParseRecordRepository.findById(record.getId()).map(this::toResponse).orElseGet(() -> toResponse(record));
+        return fileParseRecordRepository.findById(record.getId())
+                .map(this::toResponse)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SYSTEM_ERROR, "file parse record is not readable"));
     }
 
     public List<FileParseRecordResponse> listFileParseRecords(Long fileId, Long projectId) {
@@ -106,18 +115,34 @@ public class FileParseApplicationService {
     public FileParseRecordResponse getLatestFileParseRecord(Long fileId, Long projectId) {
         FileObject fileObject = findActiveFile(fileId);
         verifyProject(fileObject, projectId);
+        return getLatestFileParseRecordForSystem(fileId, projectId);
+    }
+
+    public FileParseRecordResponse getLatestFileParseRecordForSystem(Long fileId, Long projectId) {
         return fileParseRecordRepository.findLatestByFileId(projectId, fileId)
                 .map(this::toResponse)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "file parse record not found"));
     }
 
     public FileParseRecordResponse getParseRecord(Long recordId) {
-        return toResponse(findRecord(recordId));
+        FileParseRecord record = findRecord(recordId);
+        projectAccessApplicationService.requireProjectAccess(record.getProjectId());
+        return toResponse(record);
     }
 
     public FileParseContentResponse getParseContent(Long recordId) {
         FileParseRecord record = findRecord(recordId);
-        if (!FileParseStatus.SUCCEEDED.name().equals(record.getStatus()) || record.getResultObjectName() == null) {
+        projectAccessApplicationService.requireProjectAccess(record.getProjectId());
+        return readParseContent(record);
+    }
+
+    public FileParseContentResponse getParseContentForSystem(Long recordId) {
+        FileParseRecord record = findRecord(recordId);
+        return readParseContent(record);
+    }
+
+    private FileParseContentResponse readParseContent(FileParseRecord record) {
+        if (!FileParseStatus.SUCCESS.name().equals(record.getStatus()) || record.getResultObjectName() == null) {
             throw new BusinessException(ErrorCode.CONFLICT, "file parse result is not ready");
         }
         String content;
@@ -138,6 +163,7 @@ public class FileParseApplicationService {
 
     public FileParseRecordResponse retryParse(Long recordId) {
         FileParseRecord sourceRecord = findRecord(recordId);
+        projectAccessApplicationService.requireProjectWritableAccess(sourceRecord.getProjectId());
         FileParseRequest request = new FileParseRequest();
         request.setProjectId(sourceRecord.getProjectId());
         request.setTargetFormat(sourceRecord.getResultFormat());
@@ -163,7 +189,7 @@ public class FileParseApplicationService {
         if (projectId == null || !projectId.equals(fileObject.getProjectId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "file does not belong to project");
         }
-        // TODO: verify current user has access to projectId before file parse operation.
+        projectAccessApplicationService.requireProjectWritableAccess(projectId);
     }
 
     private FileParseResultFormat resolveTargetFormat(FileObject fileObject, String requestedFormat) {
@@ -237,7 +263,7 @@ public class FileParseApplicationService {
             metadata.put("force", Boolean.TRUE.equals(request.getForce()));
             return objectMapper.writeValueAsString(metadata);
         } catch (Exception ex) {
-            return null;
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "file parse metadata serialization failed");
         }
     }
 

@@ -2,33 +2,62 @@ package com.xd.smartworksite.template.application;
 
 import com.xd.smartworksite.file.infra.StorageAdapter;
 import com.xd.smartworksite.file.infra.StorageObject;
+import com.xd.smartworksite.auth.domain.ProjectMember;
+import com.xd.smartworksite.auth.mapper.ProjectMemberMapper;
+import com.xd.smartworksite.common.exception.BusinessException;
+import com.xd.smartworksite.common.result.ErrorCode;
+import com.xd.smartworksite.common.security.UserPrincipal;
+import com.xd.smartworksite.project.application.ProjectAccessApplicationService;
 import com.xd.smartworksite.project.domain.Project;
 import com.xd.smartworksite.project.repository.ProjectRepository;
 import com.xd.smartworksite.template.domain.FileObjectRecord;
 import com.xd.smartworksite.template.domain.Template;
 import com.xd.smartworksite.template.domain.TemplateStatus;
+import com.xd.smartworksite.template.dto.TemplateQueryRequest;
 import com.xd.smartworksite.template.dto.TemplateResponse;
 import com.xd.smartworksite.template.repository.TemplateRepository;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class TemplateApplicationServiceTest {
+
+    @BeforeEach
+    void setUpSecurityContext() {
+        UserPrincipal principal = new UserPrincipal(1L, "admin", List.of("PLATFORM_ADMIN"), List.of(), 1L);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
+        );
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void uploadReportTemplateStoresFileObjectAndTemplateMetadata() {
         InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
+        ProjectRepository projectRepository = projectRepository();
         TemplateApplicationService service = new TemplateApplicationService(
                 templateRepository,
-                projectRepository(),
+                new ProjectAccessApplicationService(projectRepository, new EmptyProjectMemberMapper()),
                 new CapturingStorageAdapter()
         );
         MockMultipartFile file = new MockMultipartFile(
@@ -59,10 +88,267 @@ class TemplateApplicationServiceTest {
         assertThat(templateRepository.fileObjects.get(0).getBizId()).isEqualTo(1L);
     }
 
+    @Test
+    void uploadTemplateFailsFastWhenOriginalFilenameIsBlank() {
+        TemplateApplicationService service = newService(new InMemoryTemplateRepository(), new CapturingStorageAdapter());
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "",
+                "application/octet-stream",
+                "template".getBytes()
+        );
+
+        assertThatThrownBy(() -> service.uploadTemplate(
+                1L,
+                "REPORT",
+                "密评报告模板",
+                "CRYPTO_EVALUATION_REPORT",
+                null,
+                "v1",
+                null,
+                file
+        ))
+                .isInstanceOfSatisfying(com.xd.smartworksite.common.exception.BusinessException.class, ex ->
+                        assertThat(ex.getMessage()).contains("模板文件名不能为空"));
+    }
+
+    @Test
+    void uploadTemplateFailsFastWhenStorageUploadFails() {
+        TemplateApplicationService service = newService(new InMemoryTemplateRepository(), new FailingStorageAdapter());
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "report-template.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "template".getBytes()
+        );
+
+        assertThatThrownBy(() -> service.uploadTemplate(
+                1L,
+                "REPORT",
+                "密评报告模板",
+                "CRYPTO_EVALUATION_REPORT",
+                null,
+                "v1",
+                null,
+                file
+        ))
+                .isInstanceOfSatisfying(com.xd.smartworksite.common.exception.BusinessException.class, ex ->
+                        assertThat(ex.getMessage()).contains("上传模板文件失败"));
+    }
+
+    @Test
+    void platformAdminQueryAndListTemplatesWithoutProjectDoNotApplyMemberProjectFilter() {
+        InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
+        TemplateApplicationService service = newService(templateRepository, new CapturingStorageAdapter());
+
+        service.queryTemplates(new TemplateQueryRequest());
+        assertThat(templateRepository.lastAccessibleProjectIds).isNull();
+
+        service.listTemplates(new TemplateQueryRequest());
+        assertThat(templateRepository.lastAccessibleProjectIds).isNull();
+    }
+
+    @Test
+    void queryTemplatesRejectsInvalidCategoryAndStatus() {
+        TemplateApplicationService service = newService(new InMemoryTemplateRepository(), new CapturingStorageAdapter());
+        TemplateQueryRequest invalidCategory = new TemplateQueryRequest();
+        invalidCategory.setTemplateCategory("UNKNOWN");
+
+        assertThatThrownBy(() -> service.queryTemplates(invalidCategory))
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getCode()).isEqualTo(ErrorCode.PARAM_ERROR.getCode()));
+
+        TemplateQueryRequest invalidStatus = new TemplateQueryRequest();
+        invalidStatus.setStatus("UNKNOWN");
+
+        assertThatThrownBy(() -> service.listTemplates(invalidStatus))
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getCode()).isEqualTo(ErrorCode.PARAM_ERROR.getCode()));
+    }
+
+    @Test
+    void listReportTemplateVariablesParsesStoredTemplateContent() {
+        InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
+        CapturingStorageAdapter storageAdapter = new CapturingStorageAdapter();
+        TemplateApplicationService service = newService(templateRepository, storageAdapter);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "report-template.md",
+                "text/markdown",
+                "项目：${ projectName }\n编号：${projectCode}\n重复：${projectName}".getBytes(StandardCharsets.UTF_8)
+        );
+        TemplateResponse uploaded = service.uploadTemplate(
+                1L,
+                "REPORT",
+                "密评报告模板",
+                "CRYPTO_EVALUATION_REPORT",
+                null,
+                "v1",
+                null,
+                file
+        );
+
+        List<String> variables = service.listTemplateVariables(uploaded.getTemplateId());
+
+        assertThat(variables).containsExactly("projectName", "projectCode");
+    }
+
+    @Test
+    void listReportTemplateVariablesFailsFastWhenTemplateContentIsEmpty() {
+        InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
+        CapturingStorageAdapter storageAdapter = new CapturingStorageAdapter();
+        TemplateApplicationService service = newService(templateRepository, storageAdapter);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "report-template.txt",
+                "text/plain",
+                "   ".getBytes(StandardCharsets.UTF_8)
+        );
+        TemplateResponse uploaded = service.uploadTemplate(
+                1L,
+                "REPORT",
+                "密评报告模板",
+                "CRYPTO_EVALUATION_REPORT",
+                null,
+                "v1",
+                null,
+                file
+        );
+
+        assertThatThrownBy(() -> service.listTemplateVariables(uploaded.getTemplateId()))
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode()));
+    }
+
+    @Test
+    void listReportTemplateVariablesRejectsReviewTemplate() {
+        InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
+        CapturingStorageAdapter storageAdapter = new CapturingStorageAdapter();
+        TemplateApplicationService service = newService(templateRepository, storageAdapter);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "review-template.md",
+                "text/markdown",
+                "${ruleName}".getBytes(StandardCharsets.UTF_8)
+        );
+        TemplateResponse uploaded = service.uploadTemplate(
+                1L,
+                "REVIEW",
+                "审查模板",
+                "COMPLIANCE_REVIEW",
+                null,
+                "v1",
+                null,
+                file
+        );
+
+        assertThatThrownBy(() -> service.listTemplateVariables(uploaded.getTemplateId()))
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getCode()).isEqualTo(ErrorCode.PARAM_ERROR.getCode()));
+    }
+
+    @Test
+    void updateTemplateFailsFastWhenRepositoryDoesNotUpdateRow() {
+        FailingWriteTemplateRepository templateRepository = new FailingWriteTemplateRepository();
+        Template template = reportTemplate(1L);
+        templateRepository.addTemplate(template);
+        TemplateApplicationService service = newService(templateRepository, new CapturingStorageAdapter());
+        com.xd.smartworksite.template.dto.TemplateUpdateRequest request = new com.xd.smartworksite.template.dto.TemplateUpdateRequest();
+        request.setTemplateName("新模板");
+        request.setTemplateType("CRYPTO_EVALUATION_REPORT");
+        request.setVersionNo("v2");
+
+        assertThatThrownBy(() -> service.updateTemplate(template.getId(), request))
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode()));
+    }
+
+    @Test
+    void enableDisableAndDeleteTemplateFailFastWhenRepositoryDoesNotUpdateRow() {
+        FailingWriteTemplateRepository templateRepository = new FailingWriteTemplateRepository();
+        Template template = reportTemplate(1L);
+        templateRepository.addTemplate(template);
+        TemplateApplicationService service = newService(templateRepository, new CapturingStorageAdapter());
+
+        assertThatThrownBy(() -> service.enableTemplate(template.getId()))
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode()));
+        assertThatThrownBy(() -> service.disableTemplate(template.getId()))
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode()));
+        assertThatThrownBy(() -> service.deleteTemplate(template.getId()))
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode()));
+    }
+
+    private TemplateApplicationService newService(TemplateRepository templateRepository, StorageAdapter storageAdapter) {
+        return new TemplateApplicationService(
+                templateRepository,
+                new ProjectAccessApplicationService(projectRepository(), new EmptyProjectMemberMapper()),
+                storageAdapter
+        );
+    }
+
+    private Template reportTemplate(Long templateId) {
+        Template template = new Template();
+        template.setId(templateId);
+        template.setProjectId(1L);
+        template.setTemplateName("报告模板");
+        template.setTemplateCategory("REPORT");
+        template.setTemplateType("CRYPTO_EVALUATION_REPORT");
+        template.setVersionNo("v1");
+        template.setFileId(1L);
+        template.setStatus("ENABLED");
+        return template;
+    }
+
+    private static class EmptyProjectMemberMapper implements ProjectMemberMapper {
+        @Override
+        public List<ProjectMember> selectByProjectId(Long projectId) {
+            return List.of();
+        }
+
+        @Override
+        public ProjectMember selectByProjectIdAndUserId(Long projectId, Long userId) {
+            return null;
+        }
+
+        @Override
+        public int countActiveMember(Long projectId, Long userId) {
+            return 0;
+        }
+
+        @Override
+        public int insert(ProjectMember member) {
+            return 1;
+        }
+
+        @Override
+        public int update(ProjectMember member) {
+            return 1;
+        }
+
+        @Override
+        public int deleteByProjectIdAndUserId(Long projectId, Long userId, Long operatorId) {
+            return 1;
+        }
+
+        @Override
+        public List<Long> selectProjectIdsByUserId(Long userId) {
+            return List.of();
+        }
+            @Override public List<ProjectMember> selectEnabledByUserId(Long userId) { return List.of(); }
+}
+
     private ProjectRepository projectRepository() {
         return new ProjectRepository() {
             @Override
-            public List<Project> findPage(String keyword) {
+            public List<Project> findPage(String keyword, String status) {
+                return List.of();
+            }
+
+            @Override
+            public List<Project> findPageByProjectIds(String keyword, String status, List<Long> projectIds) {
                 return List.of();
             }
 
@@ -70,6 +356,7 @@ class TemplateApplicationServiceTest {
             public Optional<Project> findById(Long projectId) {
                 Project project = new Project();
                 project.setId(projectId);
+                project.setStatus("ENABLED");
                 return Optional.of(project);
             }
 
@@ -84,28 +371,54 @@ class TemplateApplicationServiceTest {
             }
 
             @Override
-            public void update(Project project) {
+            public int update(Project project) {
+                return 1;
             }
 
             @Override
-            public void softDelete(Long projectId, Long updatedBy) {
+            public int softDelete(Long projectId, Long updatedBy) {
+                return 1;
             }
 
             @Override
-            public void updateStatus(Long projectId, String status, Long updatedBy) {
+            public int updateStatus(Long projectId, String status, Long updatedBy) {
+                return 1;
             }
+
+            @Override public int updateSettings(Long projectId, String settings, Long updatedBy) { return 1; }
+            @Override public long countActiveMembers(Long projectId) { return 0; }
+            @Override public long countKnowledgeBases(Long projectId) { return 0; }
+            @Override public long countReports(Long projectId) { return 0; }
+            @Override public long countDataSources(Long projectId) { return 0; }
+            @Override public long countQaMessages(Long projectId) { return 0; }
+            @Override public long countReviewRecords(Long projectId) { return 0; }
+            @Override public long countOcrRecords(Long projectId) { return 0; }
+            @Override public long sumFileStorageBytes(Long projectId) { return 0; }
         };
     }
 
     private static class CapturingStorageAdapter implements StorageAdapter {
+        private final java.util.Map<String, byte[]> objects = new java.util.HashMap<>();
+
         @Override
         public StorageObject upload(String objectName, InputStream inputStream, long size, String contentType) {
+            try {
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                inputStream.transferTo(outputStream);
+                objects.put(objectName, outputStream.toByteArray());
+            } catch (IOException ex) {
+                throw new IllegalStateException(ex);
+            }
             return new StorageObject(objectName, "test-bucket",contentType, size);
         }
 
         @Override
         public InputStream openObject(String objectName) {
-            return InputStream.nullInputStream();
+            byte[] content = objects.get(objectName);
+            if (content == null) {
+                throw new IllegalStateException("object not found");
+            }
+            return new ByteArrayInputStream(content);
         }
 
         @Override
@@ -118,11 +431,23 @@ class TemplateApplicationServiceTest {
         }
     }
 
+    private static class FailingStorageAdapter extends CapturingStorageAdapter {
+        @Override
+        public StorageObject upload(String objectName, InputStream inputStream, long size, String contentType) {
+            throw new IllegalStateException("storage down");
+        }
+    }
+
     private static class InMemoryTemplateRepository implements TemplateRepository {
         private long nextFileId = 1L;
         private long nextTemplateId = 1L;
         private final List<FileObjectRecord> fileObjects = new ArrayList<>();
         private final List<Template> templates = new ArrayList<>();
+        private List<Long> lastAccessibleProjectIds;
+
+        void addTemplate(Template template) {
+            templates.add(template);
+        }
 
         @Override
         public FileObjectRecord saveFileObject(FileObjectRecord fileObject) {
@@ -132,12 +457,18 @@ class TemplateApplicationServiceTest {
         }
 
         @Override
-        public void updateFileBizId(Long fileId, Long bizId) {
+        public Optional<FileObjectRecord> findFileObjectById(Long fileId) {
+            return fileObjects.stream().filter(file -> fileId.equals(file.getId())).findFirst();
+        }
+
+        @Override
+        public int updateFileBizId(Long fileId, Long bizId) {
             fileObjects.stream()
                     .filter(file -> fileId.equals(file.getId()))
                     .findFirst()
                     .orElseThrow()
                     .setBizId(bizId);
+            return 1;
         }
 
         @Override
@@ -153,20 +484,47 @@ class TemplateApplicationServiceTest {
         }
 
         @Override
-        public List<Template> findPage(Long projectId, String templateCategory, String templateType, String status, String keyword) {
+        public List<Template> findPage(Long projectId, List<Long> accessibleProjectIds, String templateCategory, String templateType, String status, String keyword) {
+            lastAccessibleProjectIds = accessibleProjectIds;
             return templates;
         }
 
         @Override
-        public void update(Template template) {
+        public int update(Template template) {
+            return 1;
         }
 
         @Override
-        public void updateStatus(Long templateId, String status) {
+        public int updateStatus(Long templateId, String status) {
+            return findById(templateId).map(template -> {
+                template.setStatus(status);
+                return 1;
+            }).orElse(0);
         }
 
         @Override
-        public void delete(Long templateId) {
+        public int delete(Long templateId) {
+            return findById(templateId).map(template -> {
+                templates.remove(template);
+                return 1;
+            }).orElse(0);
+        }
+    }
+
+    private static class FailingWriteTemplateRepository extends InMemoryTemplateRepository {
+        @Override
+        public int update(Template template) {
+            return 0;
+        }
+
+        @Override
+        public int updateStatus(Long templateId, String status) {
+            return 0;
+        }
+
+        @Override
+        public int delete(Long templateId) {
+            return 0;
         }
     }
 }

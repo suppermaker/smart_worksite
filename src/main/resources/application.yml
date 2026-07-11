@@ -50,6 +50,10 @@ app:
     jwt:
       secret: ${JWT_SECRET:SmartWorksiteJwtSecretKeyMustBe256BitsOrLongerForHS256Algorithm!!}
       expires-in-seconds: ${JWT_EXPIRES_IN_SECONDS:7200}
+    login-security:
+      max-failure-count: ${AUTH_LOGIN_MAX_FAILURE_COUNT:5}
+      failure-window-seconds: ${AUTH_LOGIN_FAILURE_WINDOW_SECONDS:900}
+      lock-seconds: ${AUTH_LOGIN_LOCK_SECONDS:900}
   storage:
     minio:
       endpoint: ${MINIO_ENDPOINT:http://${MINIO_HOST:localhost}:${MINIO_API_PORT:9000}}
@@ -70,6 +74,18 @@ app:
         model: ${QWEN_VL_MODEL:qwen-vl-plus}
         connect-timeout-ms: ${QWEN_VL_CONNECT_TIMEOUT_MS:5000}
         read-timeout-ms: ${QWEN_VL_READ_TIMEOUT_MS:120000}
+  task:
+    outbox:
+      dispatcher:
+        enabled: ${TASK_OUTBOX_DISPATCHER_ENABLED:false}
+        batch-size: ${TASK_OUTBOX_DISPATCHER_BATCH_SIZE:20}
+        fixed-delay-ms: ${TASK_OUTBOX_DISPATCHER_FIXED_DELAY_MS:5000}
+    worker:
+      enabled: ${TASK_WORKER_ENABLED:false}
+      worker-id: ${TASK_WORKER_ID:smart-worksite-worker}
+      poll-delay-ms: ${TASK_WORKER_POLL_DELAY_MS:2000}
+      pop-timeout-ms: ${TASK_WORKER_POP_TIMEOUT_MS:1000}
+      lease-seconds: ${TASK_WORKER_LEASE_SECONDS:300}
 
   ai:
     python-service:

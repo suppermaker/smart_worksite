@@ -17,8 +17,13 @@ public class MyBatisProjectRepository implements ProjectRepository {
     }
 
     @Override
-    public List<Project> findPage(String keyword) {
-        return projectMapper.selectPage(keyword);
+    public List<Project> findPage(String keyword, String status) {
+        return projectMapper.selectPage(keyword, status);
+    }
+
+    @Override
+    public List<Project> findPageByProjectIds(String keyword, String status, List<Long> projectIds) {
+        return projectMapper.selectPageByProjectIds(keyword, status, projectIds);
     }
 
     @Override
@@ -33,22 +38,54 @@ public class MyBatisProjectRepository implements ProjectRepository {
 
     @Override
     public Project insert(Project project) {
-        projectMapper.insert(project);
+        int inserted = projectMapper.insert(project);
+        if (inserted <= 0 || project.getId() == null) {
+            throw new IllegalStateException("project insert failed or id was not generated");
+        }
         return project;
     }
 
     @Override
-    public void update(Project project) {
-        projectMapper.update(project);
+    public int update(Project project) {
+        return projectMapper.update(project);
     }
 
     @Override
-    public void softDelete(Long projectId, Long updatedBy) {
-        projectMapper.softDelete(projectId, updatedBy);
+    public int softDelete(Long projectId, Long updatedBy) {
+        return projectMapper.softDelete(projectId, updatedBy);
     }
 
     @Override
-    public void updateStatus(Long projectId, String status, Long updatedBy) {
-        projectMapper.updateStatus(projectId, status, updatedBy);
+    public int updateStatus(Long projectId, String status, Long updatedBy) {
+        return projectMapper.updateStatus(projectId, status, updatedBy);
     }
+
+    @Override
+    public int updateSettings(Long projectId, String settings, Long updatedBy) {
+        return projectMapper.updateSettings(projectId, settings, updatedBy);
+    }
+
+    @Override
+    public long countActiveMembers(Long projectId) { return projectMapper.countActiveMembers(projectId); }
+
+    @Override
+    public long countKnowledgeBases(Long projectId) { return projectMapper.countKnowledgeBases(projectId); }
+
+    @Override
+    public long countReports(Long projectId) { return projectMapper.countReports(projectId); }
+
+    @Override
+    public long countDataSources(Long projectId) { return projectMapper.countDataSources(projectId); }
+
+    @Override
+    public long countQaMessages(Long projectId) { return projectMapper.countQaMessages(projectId); }
+
+    @Override
+    public long countReviewRecords(Long projectId) { return projectMapper.countReviewRecords(projectId); }
+
+    @Override
+    public long countOcrRecords(Long projectId) { return projectMapper.countOcrRecords(projectId); }
+
+    @Override
+    public long sumFileStorageBytes(Long projectId) { return projectMapper.sumFileStorageBytes(projectId); }
 }

@@ -56,4 +56,15 @@
         SELECT project_id FROM project_member
         WHERE user_id = #{userId} AND deleted = 0 AND status = 'ENABLED'
     </select>
+
+    <select id="selectEnabledByUserId" resultMap="MemberResultMap">
+        SELECT pm.id, pm.project_id, pm.user_id, pm.project_role, pm.status, pm.created_at, pm.updated_at,
+               ua.username, ua.display_name
+        FROM project_member pm
+        INNER JOIN user_account ua ON pm.user_id = ua.id AND ua.deleted = 0
+        WHERE pm.user_id = #{userId}
+          AND pm.deleted = 0
+          AND pm.status = 'ENABLED'
+        ORDER BY pm.created_at ASC
+    </select>
 </mapper>

@@ -12,6 +12,7 @@ public class ReportCreateRequest {
     @NotNull
     private Long projectId;
 
+    @NotBlank
     @Size(max = 128)
     private String reportName;
 

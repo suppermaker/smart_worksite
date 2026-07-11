@@ -1,4 +1,4 @@
-# File Module Agent Guide
+﻿# File Module Agent Guide
 
 This document describes the intended design for the `file` module. Read the root `README.md` and root `AGENTS.md` before editing this module.
 
@@ -153,8 +153,8 @@ Recommended endpoints:
 POST   /api/files/upload
 GET    /api/files
 GET    /api/files/{fileId}
-GET    /api/files/{fileId}/download-url
-GET    /api/files/{fileId}/preview-url
+GET    /api/files/{fileId}/access-url?usage=DOWNLOAD
+GET    /api/files/{fileId}/access-url?usage=PREVIEW
 DELETE /api/files/{fileId}
 ```
 
@@ -269,11 +269,7 @@ order by created_at desc, id desc
 
 Every public API must enforce project isolation.
 
-When the auth/project permission foundation is not complete, keep a clear application-service-level validation point:
-
-```java
-// TODO: verify current user has access to projectId before file operation.
-```
+Use `project.application.ProjectAccessApplicationService` in application services before reading or mutating project-scoped file and parse records.
 
 Do not implement project access checks in MyBatis XML as hidden business logic. XML should only apply explicit query filters.
 
@@ -574,7 +570,7 @@ Recommended parse status values:
 ```text
 PENDING
 RUNNING
-SUCCEEDED
+SUCCESS
 FAILED
 CANCELED
 ```

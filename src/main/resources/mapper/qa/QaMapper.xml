@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xd.smartworksite.qa.mapper.QaMapper">
+
+    <resultMap id="QaSessionResultMap" type="com.xd.smartworksite.qa.domain.QaSession">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="title" column="title"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="updatedBy" column="updated_by"/>
+    </resultMap>
+
+    <resultMap id="QaMessageResultMap" type="com.xd.smartworksite.qa.domain.QaMessage">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="sessionId" column="session_id"/>
+        <result property="role" column="role"/>
+        <result property="question" column="question"/>
+        <result property="answer" column="answer"/>
+        <result property="routeMode" column="route_mode"/>
+        <result property="referencesJson" column="references_json"/>
+        <result property="feedbackJson" column="feedback_json"/>
+        <result property="status" column="status"/>
+        <result property="taskId" column="task_id"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="updatedBy" column="updated_by"/>
+    </resultMap>
+
+    <sql id="SessionColumns">
+        id, project_id, title, status, created_at, updated_at, created_by, updated_by
+    </sql>
+
+    <sql id="MessageColumns">
+        id, project_id, session_id, role, question, answer, route_mode, references_json,
+        feedback_json, status, task_id, created_at, updated_at, created_by, updated_by
+    </sql>
+
+    <insert id="insertSession" useGeneratedKeys="true" keyProperty="id">
+        insert into qa_session (project_id, title, status, created_by, updated_by)
+        values (#{projectId}, #{title}, #{status}, #{createdBy}, #{updatedBy})
+    </insert>
+
+    <select id="selectSessionById" resultMap="QaSessionResultMap">
+        select <include refid="SessionColumns"/>
+        from qa_session
+        where id = #{sessionId}
+          and deleted = 0
+    </select>
+
+    <select id="selectSessions" resultMap="QaSessionResultMap">
+        select <include refid="SessionColumns"/>
+        from qa_session
+        where deleted = 0
+        <if test="projectId != null">
+            and project_id = #{projectId}
+        </if>
+        <if test="projectId == null and accessibleProjectIds != null">
+            and project_id in
+            <foreach collection="accessibleProjectIds" item="projectIdItem" open="(" separator="," close=")">
+                #{projectIdItem}
+            </foreach>
+        </if>
+        <if test="status != null and status != ''">
+            and status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            and title like concat('%', #{keyword}, '%')
+        </if>
+        order by updated_at desc, id desc
+    </select>
+
+    <update id="updateSessionTitle">
+        update qa_session
+        set title = #{title},
+            updated_by = #{updatedBy}
+        where id = #{sessionId}
+          and deleted = 0
+    </update>
+
+    <update id="archiveSession">
+        update qa_session
+        set status = 'ARCHIVED',
+            deleted = 1,
+            updated_by = #{updatedBy}
+        where id = #{sessionId}
+          and deleted = 0
+    </update>
+
+    <insert id="insertMessage" useGeneratedKeys="true" keyProperty="id">
+        insert into qa_message (
+            project_id, session_id, role, question, answer, route_mode, references_json,
+            feedback_json, status, task_id, created_by, updated_by
+        ) values (
+            #{projectId}, #{sessionId}, #{role}, #{question}, #{answer}, #{routeMode}, #{referencesJson},
+            #{feedbackJson}, #{status}, #{taskId}, #{createdBy}, #{updatedBy}
+        )
+    </insert>
+
+    <update id="updateMessage">
+        update qa_message
+        set answer = #{answer},
+            route_mode = #{routeMode},
+            references_json = #{referencesJson},
+            status = #{status},
+            updated_by = #{updatedBy}
+        where id = #{id}
+          and deleted = 0
+    </update>
+
+    <select id="selectMessageById" resultMap="QaMessageResultMap">
+        select <include refid="MessageColumns"/>
+        from qa_message
+        where id = #{messageId}
+          and deleted = 0
+    </select>
+
+    <select id="selectMessagesBySessionId" resultMap="QaMessageResultMap">
+        select <include refid="MessageColumns"/>
+        from qa_message
+        where session_id = #{sessionId}
+          and deleted = 0
+        order by created_at asc, id asc
+    </select>
+
+    <update id="updateMessageFeedback">
+        update qa_message
+        set feedback_json = #{feedbackJson},
+            updated_by = #{updatedBy}
+        where id = #{messageId}
+          and deleted = 0
+    </update>
+</mapper>

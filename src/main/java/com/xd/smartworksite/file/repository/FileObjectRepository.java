@@ -8,7 +8,7 @@ import java.util.Optional;
 
 public interface FileObjectRepository {
 
-    void insert(FileObject fileObject);
+    FileObject insert(FileObject fileObject);
 
     List<FileObject> findPage(FileQueryRequest request);
 

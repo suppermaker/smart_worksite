@@ -1,17 +1,18 @@
 ﻿import request from '../utils/request';
 import { mockQaMessages, mockQaSessions } from '../mocks/qa';
-import type { ID, QaMessage, QaSession } from './types';
+import type { ID, PageResult, QaMessage, QaSession } from './types';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
 export async function createQaSession(data: { projectId: ID; title?: string }) {
-  if (useMock) return { ...mockQaSessions[0], ...data, id: Date.now(), sessionId: Date.now() } satisfies QaSession;
+  if (useMock) return { ...mockQaSessions[0], ...data, sessionId: Date.now() } satisfies QaSession;
   return request.post<QaSession>('/qa/sessions', data);
 }
 
 export async function fetchQaSessions(projectId: ID) {
   if (useMock) return mockQaSessions.filter((item) => String(item.projectId) === String(projectId));
-  return request.get<QaSession[]>('/qa/sessions', { params: { projectId } });
+  const page = await request.get<PageResult<QaSession>>('/qa/sessions', { params: { projectId } });
+  return page.records;
 }
 
 export async function fetchQaMessages(sessionId: ID) {
@@ -23,9 +24,8 @@ export async function sendQuestion(sessionId: ID, data: { projectId: ID; questio
   if (useMock) {
     const now = new Date().toISOString();
     return {
-      id: Date.now(), messageId: Date.now(), sessionId, projectId: data.projectId, taskId: 9301, fileId: 0, role: 'assistant', question: data.question,
+      messageId: Date.now(), sessionId, projectId: data.projectId, question: data.question,
       answer: '临边防护应设置防护栏杆、挡脚板和安全网，洞口需采用盖板或围栏并设置警示标识。',
-      content: '临边防护应设置防护栏杆、挡脚板和安全网，洞口需采用盖板或围栏并设置警示标识。',
       routeMode: 'MIXED', status: 'SUCCESS', createdAt: now, updatedAt: now,
       references: [
         { title: 'JGJ 80-2016 高处作业安全技术规范', sourceType: 'KNOWLEDGE', page: '第12页', score: 0.92, documentId: 3001 },
@@ -38,5 +38,8 @@ export async function sendQuestion(sessionId: ID, data: { projectId: ID; questio
 
 export async function submitFeedback(messageId: ID, useful: boolean) {
   if (useMock) return { messageId, useful };
-  return request.post(`/qa/messages/${messageId}/feedback`, { useful });
+  return request.post(`/qa/messages/${messageId}/feedback`, {
+    feedbackType: useful ? 'LIKE' : 'DISLIKE',
+    extra: { useful }
+  });
 }

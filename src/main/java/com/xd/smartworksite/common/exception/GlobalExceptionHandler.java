@@ -2,6 +2,7 @@ package com.xd.smartworksite.common.exception;
 
 import com.xd.smartworksite.common.result.ApiResponse;
 import com.xd.smartworksite.common.result.ErrorCode;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -14,7 +15,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
-import jakarta.validation.ConstraintViolationException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -30,32 +30,32 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthenticationException.class)
     @ResponseStatus(HttpStatus.OK)
     public ApiResponse<Void> handleAuthenticationException(AuthenticationException ex) {
-        return ApiResponse.error(ErrorCode.UNAUTHORIZED, "未登录或登录已过期");
+        return ApiResponse.error(ErrorCode.UNAUTHORIZED, "\u672a\u767b\u5f55\u6216\u767b\u5f55\u5df2\u8fc7\u671f");
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     @ResponseStatus(HttpStatus.OK)
     public ApiResponse<Void> handleAccessDeniedException(AccessDeniedException ex) {
-        return ApiResponse.error(ErrorCode.FORBIDDEN, "无权限访问");
+        return ApiResponse.error(ErrorCode.FORBIDDEN, "\u65e0\u6743\u9650\u8bbf\u95ee");
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class, ConstraintViolationException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleValidationException(Exception ex) {
-        return ApiResponse.error(ErrorCode.PARAM_ERROR, "参数校验失败");
+        return ApiResponse.error(ErrorCode.PARAM_ERROR, "\u53c2\u6570\u6821\u9a8c\u5931\u8d25");
     }
 
     @ExceptionHandler(DataAccessException.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleDataAccessException(DataAccessException ex) {
         log.error("database error", ex);
-        return ApiResponse.error(ErrorCode.SYSTEM_ERROR, "数据库操作失败");
+        return ApiResponse.error(ErrorCode.SYSTEM_ERROR, "\u6570\u636e\u5e93\u64cd\u4f5c\u5931\u8d25");
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
     @ResponseStatus(HttpStatus.OK)
     public ApiResponse<Void> handleNoResourceFoundException(NoResourceFoundException ex) {
-        return ApiResponse.error(ErrorCode.NOT_FOUND, "接口不存在");
+        return ApiResponse.error(ErrorCode.NOT_FOUND, "\u63a5\u53e3\u4e0d\u5b58\u5728");
     }
 
     @ExceptionHandler(Exception.class)

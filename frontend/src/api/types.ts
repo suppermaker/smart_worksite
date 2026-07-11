@@ -1,5 +1,5 @@
 ﻿export type ID = string | number;
-export type Status = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'SUCCESS' | 'FAILED' | 'ACTIVE' | 'DISABLED' | 'ARCHIVED';
+export type Status = 'PENDING' | 'QUEUED' | 'RUNNING' | 'PROCESSING' | 'COMPLETED' | 'SUCCESS' | 'FAILED' | 'RETRYING' | 'CANCELED' | 'ACTIVE' | 'ENABLED' | 'DISABLED' | 'ARCHIVED';
 
 export interface PageQuery {
   pageNo?: number;
@@ -22,9 +22,19 @@ export interface UserInfo {
   realName: string;
   roles: string[];
   permissions: string[];
+  buttonPermissions?: string[];
+  projects?: UserProject[];
   defaultProjectId?: ID;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UserProject {
+  projectId: ID;
+  projectName: string;
+  projectCode: string;
+  status: string;
+  projectRole: string;
 }
 
 export interface LoginRequest {
@@ -65,53 +75,59 @@ export interface ProjectUpdateForm {
 }
 
 export interface FileObject {
-  id: ID;
   fileId: ID;
+  objectName?: string;
   projectId: ID;
-  taskId?: ID;
-  originalName: string;
-  fileType: string;
-  size: number;
+  bizType?: string;
+  bizId?: ID;
+  fileName: string;
+  fileExt?: string;
+  contentType?: string;
+  fileSize: number;
+  fileHash?: string;
   status: Status;
+  metadata?: string;
+  previewSupported?: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
+export interface FileAccessUrl {
+  fileId: ID;
+  url: string;
+  expiresAt: string;
+  previewSupported?: boolean;
+}
+
 export interface KnowledgeBase {
-  id: ID;
+  knowledgeBaseId: ID;
   projectId: ID;
-  taskId?: ID;
-  fileId?: ID;
+  domain?: string;
   name: string;
   description: string;
   status: Status;
-  documentCount: number;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface KnowledgeDocument {
-  id: ID;
   documentId: ID;
   projectId: ID;
   knowledgeBaseId: ID;
-  taskId: ID;
-  fileId: ID;
-  fileName: string;
-  parseStatus: Status;
+  fileId?: ID;
+  title: string;
+  sourceType?: string;
   indexStatus: Status;
-  status: Status;
-  failReason?: string;
+  taskId?: ID;
+  errorMessage?: string;
+  versionNo?: number;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface QaSession {
-  id: ID;
   sessionId: ID;
   projectId: ID;
-  taskId?: ID;
-  fileId?: ID;
   title: string;
   status: Status;
   createdAt: string;
@@ -127,19 +143,18 @@ export interface QaReference {
 }
 
 export interface QaMessage {
-  id: ID;
   messageId: ID;
   sessionId: ID;
   projectId: ID;
-  taskId?: ID;
-  fileId?: ID;
-  role: 'user' | 'assistant';
   question?: string;
   answer?: string;
-  content: string;
   routeMode?: 'AUTO' | 'MODEL' | 'KNOWLEDGE' | 'DATABASE' | 'MIXED';
   references?: QaReference[];
+  feedback?: Record<string, unknown>;
   status: Status;
+  needClarification?: boolean;
+  clarificationQuestions?: string[];
+  providerTraceId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -167,15 +182,15 @@ export interface ReviewIssue {
 }
 
 export interface ReviewRecord {
-  id: ID;
   recordId: ID;
   projectId: ID;
-  taskId: ID;
-  fileId: ID;
+  taskId?: ID;
+  fileId?: ID;
   templateId: ID;
   status: Status;
-  progress: number;
   issues: ReviewIssue[];
+  result?: Record<string, unknown>;
+  errorMessage?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -237,6 +252,19 @@ export interface RoleItem {
   updatedAt: string;
 }
 
+export interface RoleCreateForm {
+  roleCode: string;
+  roleName: string;
+  description?: string;
+  permissionIds?: ID[];
+}
+
+export interface RoleUpdateForm {
+  roleName: string;
+  description?: string;
+  permissionIds?: ID[];
+}
+
 export interface PermissionItem {
   id: ID;
   permissionCode: string;
@@ -279,25 +307,33 @@ export interface OcrRecord {
 
 export interface TaskStageLog {
   id: ID;
-  projectId: ID;
   taskId: ID;
-  fileId?: ID;
-  stageName: string;
+  attemptNo?: number;
+  stageCode: string;
   status: Status;
-  message: string;
+  inputSummary?: string;
+  outputSummary?: string;
+  errorMessage?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  costMs?: number;
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface TaskDetail {
-  id: ID;
-  projectId: ID;
   taskId: ID;
-  fileId?: ID;
+  projectId: ID;
   taskType: string;
+  bizType?: string;
+  bizId?: ID;
   status: Status;
-  progress: number;
-  stageLogs: TaskStageLog[];
+  currentStage?: string;
+  retryCount?: number;
+  maxRetryCount?: number;
+  cancelRequested?: boolean;
+  errorMessage?: string;
+  startedAt?: string;
+  finishedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

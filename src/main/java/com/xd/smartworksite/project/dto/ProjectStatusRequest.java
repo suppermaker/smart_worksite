@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Pattern;
 public class ProjectStatusRequest {
 
     @NotBlank
-    @Pattern(regexp = "ENABLED|DISABLED")
+    @Pattern(regexp = "(?i)ENABLED|DISABLED|ARCHIVED")
     private String status;
 
     public String getStatus() {

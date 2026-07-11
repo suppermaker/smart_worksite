@@ -45,6 +45,12 @@
         <if test="projectId != null">
             and project_id = #{projectId}
         </if>
+        <if test="projectId == null and accessibleProjectIds != null">
+            and project_id in
+            <foreach collection="accessibleProjectIds" item="projectIdItem" open="(" separator="," close=")">
+                #{projectIdItem}
+            </foreach>
+        </if>
         <if test="serviceName != null and serviceName != ''">
             and service_name = #{serviceName}
         </if>

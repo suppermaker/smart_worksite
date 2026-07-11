@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xd.smartworksite.task.mapper.TaskMapper">
+
+    <resultMap id="TaskResultMap" type="com.xd.smartworksite.task.domain.GenerateTask">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="taskType" column="task_type"/>
+        <result property="bizType" column="biz_type"/>
+        <result property="bizId" column="biz_id"/>
+        <result property="status" column="status"/>
+        <result property="currentStage" column="current_stage"/>
+        <result property="retryCount" column="retry_count"/>
+        <result property="maxRetryCount" column="max_retry_count"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="cancelRequested" column="cancel_requested"/>
+        <result property="workerId" column="worker_id"/>
+        <result property="leaseUntil" column="lease_until"/>
+        <result property="lastHeartbeatAt" column="last_heartbeat_at"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="finishedAt" column="finished_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="StageResultMap" type="com.xd.smartworksite.task.domain.TaskStageLog">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="attemptNo" column="attempt_no"/>
+        <result property="stageCode" column="stage_code"/>
+        <result property="status" column="status"/>
+        <result property="inputSummary" column="input_summary"/>
+        <result property="outputSummary" column="output_summary"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="finishedAt" column="finished_at"/>
+        <result property="costMs" column="cost_ms"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="StatusCountResultMap" type="com.xd.smartworksite.task.domain.TaskStatusCount">
+        <result property="status" column="status"/>
+        <result property="count" column="count_value"/>
+    </resultMap>
+
+    <resultMap id="OutboxResultMap" type="com.xd.smartworksite.task.domain.TaskOutboxEvent">
+        <id property="id" column="id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="eventType" column="event_type"/>
+        <result property="payload" column="payload"/>
+        <result property="status" column="status"/>
+        <result property="deliveryCount" column="delivery_count"/>
+        <result property="nextDeliveryAt" column="next_delivery_at"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="TaskColumns">
+        id, project_id, task_type, biz_type, biz_id, status, current_stage,
+        retry_count, max_retry_count, error_message, cancel_requested, worker_id,
+        lease_until, last_heartbeat_at, started_at, finished_at, created_at, updated_at
+    </sql>
+
+    <insert id="insertTask" useGeneratedKeys="true" keyProperty="id">
+        insert into generate_task (
+            project_id, task_type, biz_type, biz_id, status, current_stage,
+            retry_count, max_retry_count, error_message, cancel_requested,
+            created_by, updated_by
+        ) values (
+            #{projectId}, #{taskType}, #{bizType}, #{bizId}, #{status}, #{currentStage},
+            coalesce(#{retryCount}, 0), coalesce(#{maxRetryCount}, 3), #{errorMessage},
+            coalesce(#{cancelRequested}, 0), 1, 1
+        )
+    </insert>
+
+    <select id="selectById" resultMap="TaskResultMap">
+        select <include refid="TaskColumns"/>
+        from generate_task
+        where id = #{taskId}
+          and deleted = 0
+    </select>
+
+    <select id="selectPage" resultMap="TaskResultMap">
+        select <include refid="TaskColumns"/>
+        from generate_task
+        where deleted = 0
+        <if test="projectId != null">
+            and project_id = #{projectId}
+        </if>
+        <if test="projectId == null and accessibleProjectIds != null">
+            and project_id in
+            <foreach collection="accessibleProjectIds" item="projectIdItem" open="(" separator="," close=")">
+                #{projectIdItem}
+            </foreach>
+        </if>
+        <if test="taskType != null and taskType != ''">
+            and task_type = #{taskType}
+        </if>
+        <if test="status != null and status != ''">
+            and status = #{status}
+        </if>
+        <if test="createdFrom != null">
+            and created_at &gt;= #{createdFrom}
+        </if>
+        <if test="createdTo != null">
+            and created_at &lt;= #{createdTo}
+        </if>
+        order by created_at desc, id desc
+    </select>
+
+    <select id="selectStages" resultMap="StageResultMap">
+        select id, project_id, task_id, attempt_no, stage_code, status, input_summary,
+               output_summary, error_message, started_at, finished_at, cost_ms, created_at, updated_at
+        from task_stage_log
+        where task_id = #{taskId}
+          and deleted = 0
+        order by attempt_no asc, started_at asc, id asc
+    </select>
+
+    <select id="countByStatus" resultMap="StatusCountResultMap">
+        select status, count(1) as count_value
+        from generate_task
+        where deleted = 0
+        <if test="projectId != null">
+            and project_id = #{projectId}
+        </if>
+        <if test="projectId == null and accessibleProjectIds != null">
+            and project_id in
+            <foreach collection="accessibleProjectIds" item="projectIdItem" open="(" separator="," close=")">
+                #{projectIdItem}
+            </foreach>
+        </if>
+        group by status
+    </select>
+
+    <update id="markRetrying">
+        update generate_task
+        set status = #{nextStatus},
+            current_stage = #{currentStage},
+            retry_count = retry_count + 1,
+            error_message = null,
+            cancel_requested = 0,
+            worker_id = null,
+            lease_until = null,
+            last_heartbeat_at = null,
+            finished_at = null,
+            updated_by = #{updatedBy}
+        where id = #{taskId}
+          and status = 'FAILED'
+          and retry_count &lt; max_retry_count
+          and deleted = 0
+    </update>
+
+    <update id="cancelWaiting">
+        update generate_task
+        set status = 'CANCELED',
+            cancel_requested = 1,
+            finished_at = current_timestamp,
+            updated_by = #{updatedBy}
+        where id = #{taskId}
+          and status in ('PENDING', 'QUEUED', 'RETRYING')
+          and deleted = 0
+    </update>
+
+    <update id="requestRunningCancel">
+        update generate_task
+        set cancel_requested = 1,
+            updated_by = #{updatedBy}
+        where id = #{taskId}
+          and status = 'RUNNING'
+          and deleted = 0
+    </update>
+
+    <update id="claimQueuedTask">
+        update generate_task
+        set status = 'RUNNING',
+            current_stage = #{currentStage},
+            worker_id = #{workerId},
+            lease_until = timestampadd(second, #{leaseSeconds}, current_timestamp),
+            last_heartbeat_at = current_timestamp,
+            started_at = coalesce(started_at, current_timestamp),
+            updated_by = 1
+        where id = #{taskId}
+          and status = 'QUEUED'
+          and cancel_requested = 0
+          and deleted = 0
+    </update>
+
+    <update id="heartbeat">
+        update generate_task
+        set lease_until = timestampadd(second, #{leaseSeconds}, current_timestamp),
+            last_heartbeat_at = current_timestamp,
+            updated_by = 1
+        where id = #{taskId}
+          and status = 'RUNNING'
+          and worker_id = #{workerId}
+          and cancel_requested = 0
+          and deleted = 0
+    </update>
+
+    <update id="completeSuccess">
+        update generate_task
+        set status = 'SUCCESS',
+            current_stage = #{currentStage},
+            worker_id = null,
+            lease_until = null,
+            last_heartbeat_at = current_timestamp,
+            finished_at = current_timestamp,
+            updated_by = 1
+        where id = #{taskId}
+          and status = 'RUNNING'
+          and worker_id = #{workerId}
+          and cancel_requested = 0
+          and deleted = 0
+    </update>
+
+    <update id="completeFailure">
+        update generate_task
+        set status = 'FAILED',
+            current_stage = #{currentStage},
+            error_message = #{errorMessage},
+            worker_id = null,
+            lease_until = null,
+            last_heartbeat_at = current_timestamp,
+            finished_at = current_timestamp,
+            updated_by = 1
+        where id = #{taskId}
+          and status = 'RUNNING'
+          and worker_id = #{workerId}
+          and cancel_requested = 0
+          and deleted = 0
+    </update>
+
+    <update id="completeCanceled">
+        update generate_task
+        set status = 'CANCELED',
+            current_stage = #{currentStage},
+            error_message = #{errorMessage},
+            worker_id = null,
+            lease_until = null,
+            last_heartbeat_at = current_timestamp,
+            finished_at = current_timestamp,
+            updated_by = 1
+        where id = #{taskId}
+          and status = 'RUNNING'
+          and worker_id = #{workerId}
+          and cancel_requested = 1
+          and deleted = 0
+    </update>
+
+    <insert id="insertStage" useGeneratedKeys="true" keyProperty="id">
+        insert into task_stage_log (
+            project_id, task_id, attempt_no, stage_code, status, input_summary,
+            output_summary, error_message, started_at, finished_at, cost_ms,
+            created_by, updated_by
+        ) values (
+            #{projectId}, #{taskId}, #{attemptNo}, #{stageCode}, #{status}, #{inputSummary},
+            #{outputSummary}, #{errorMessage}, #{startedAt}, #{finishedAt}, #{costMs},
+            1, 1
+        )
+    </insert>
+
+    <insert id="insertOutboxEvent" useGeneratedKeys="true" keyProperty="id">
+        insert into task_outbox (
+            task_id, project_id, event_type, payload, status, next_delivery_at,
+            created_by, updated_by
+        ) values (
+            #{taskId}, #{projectId}, #{eventType}, #{payload}, #{status}, #{nextDeliveryAt},
+            1, 1
+        )
+        on duplicate key update
+            payload = values(payload),
+            status = values(status),
+            next_delivery_at = values(next_delivery_at),
+            error_message = null,
+            updated_by = 1
+    </insert>
+
+    <select id="selectOutboxEvent" resultMap="OutboxResultMap">
+        select id, task_id, project_id, event_type, payload, status, delivery_count,
+               next_delivery_at, error_message, created_at, updated_at
+        from task_outbox
+        where task_id = #{taskId}
+          and event_type = #{eventType}
+          and deleted = 0
+    </select>
+
+    <select id="selectDueOutboxEvents" resultMap="OutboxResultMap">
+        select id, task_id, project_id, event_type, payload, status, delivery_count,
+               next_delivery_at, error_message, created_at, updated_at
+        from task_outbox
+        where deleted = 0
+          and status = 'PENDING'
+          and next_delivery_at &lt;= current_timestamp
+        order by next_delivery_at asc, id asc
+        limit #{limit}
+    </select>
+
+    <update id="markOutboxDelivered">
+        update task_outbox
+        set status = 'DELIVERED',
+            error_message = null,
+            updated_by = 1
+        where id = #{eventId}
+          and deleted = 0
+    </update>
+
+    <update id="markOutboxFailed">
+        update task_outbox
+        set status = #{status},
+            delivery_count = delivery_count + 1,
+            error_message = #{errorMessage},
+            next_delivery_at = timestampadd(second, #{nextDeliverySeconds}, current_timestamp),
+            updated_by = 1
+        where id = #{eventId}
+          and deleted = 0
+    </update>
+</mapper>

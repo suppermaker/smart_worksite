@@ -11,11 +11,11 @@ import java.util.List;
 
 public interface ReportMapper {
 
-    void insertReportConfig(ReportConfig config);
+    int insertReportConfig(ReportConfig config);
 
-    void insertReport(Report report);
+    int insertReport(Report report);
 
-    void insertGenerateTask(GenerateTask task);
+    int insertGenerateTask(GenerateTask task);
 
     int updateReportTask(@Param("reportId") Long reportId, @Param("taskId") Long taskId);
 
@@ -43,9 +43,9 @@ public interface ReportMapper {
 
     FileObjectRecord selectFileObjectById(@Param("fileId") Long fileId);
 
-    void insertFileObject(FileObjectRecord fileObject);
+    int insertFileObject(FileObjectRecord fileObject);
 
-    void insertReportVersion(ReportVersion version);
+    int insertReportVersion(ReportVersion version);
 
     int updateReportVersionWordFile(@Param("versionId") Long versionId,
                                     @Param("wordFileId") Long wordFileId,
@@ -58,6 +58,7 @@ public interface ReportMapper {
     Long selectCurrentWordFileId(@Param("reportId") Long reportId);
 
     List<Report> selectReportPage(@Param("projectId") Long projectId,
+                                  @Param("accessibleProjectIds") List<Long> accessibleProjectIds,
                                   @Param("reportType") String reportType,
                                   @Param("status") String status,
                                   @Param("keyword") String keyword);

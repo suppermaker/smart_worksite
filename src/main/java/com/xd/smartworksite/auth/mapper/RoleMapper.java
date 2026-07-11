@@ -12,7 +12,22 @@ public interface RoleMapper {
 
     Role selectById(@Param("roleId") Long roleId);
 
+    Role selectByRoleCode(@Param("roleCode") String roleCode);
+
+    int insert(@Param("role") Role role, @Param("operatorId") Long operatorId);
+
+    int update(@Param("role") Role role, @Param("operatorId") Long operatorId);
+
+    int updateStatus(@Param("roleId") Long roleId, @Param("status") String status,
+                     @Param("operatorId") Long operatorId);
+
+    int softDelete(@Param("roleId") Long roleId, @Param("operatorId") Long operatorId);
+
+    int countActiveUsersByRoleId(@Param("roleId") Long roleId);
+
     List<Permission> selectAllPermissions();
+
+    Permission selectPermissionById(@Param("permissionId") Long permissionId);
 
     List<Long> selectPermissionIdsByRoleId(@Param("roleId") Long roleId);
 

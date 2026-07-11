@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -40,7 +41,9 @@ class AiPythonServiceClientTest {
         doThrow(new RuntimeException("log db down")).when(repository).saveExternalCallLog(any());
         AiPythonServiceClient client = new AiPythonServiceClient(properties, new ObjectMapper(), repository);
 
-        assertThrows(BusinessException.class, () -> client.post("/v1/model/invoke", "MODEL_INVOKE", 1L, new Object()));
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.post("/v1/model/invoke", "MODEL_INVOKE", 1L, new Object()));
+        assertEquals(1, exception.getSuppressed().length);
         verify(repository).saveExternalCallLog(any());
     }
 
@@ -52,6 +55,10 @@ class AiPythonServiceClientTest {
         properties.setReadTimeoutMs(50);
         properties.setRetryCount(0);
         AiRepository repository = mock(AiRepository.class);
+        doAnswer(invocation -> {
+            invocation.getArgument(0, com.xd.smartworksite.ai.domain.ExternalCallLog.class).setId(1L);
+            return 1;
+        }).when(repository).saveExternalCallLog(any());
         AiPythonServiceClient client = new AiPythonServiceClient(properties, new ObjectMapper(), repository);
 
         assertThrows(BusinessException.class, () -> client.post("/v1/model/invoke", "MODEL_INVOKE", 1L, new Object()));

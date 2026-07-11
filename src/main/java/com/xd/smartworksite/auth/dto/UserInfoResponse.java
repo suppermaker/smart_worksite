@@ -13,6 +13,8 @@ public class UserInfoResponse {
     private String status;
     private List<String> roles;
     private List<String> permissions;
+    private List<String> buttonPermissions;
+    private List<UserProjectResponse> projects;
     private Long defaultProjectId;
     private LocalDateTime lastLoginAt;
     private LocalDateTime createdAt;
@@ -41,6 +43,12 @@ public class UserInfoResponse {
 
     public List<String> getPermissions() { return permissions; }
     public void setPermissions(List<String> permissions) { this.permissions = permissions; }
+
+    public List<String> getButtonPermissions() { return buttonPermissions; }
+    public void setButtonPermissions(List<String> buttonPermissions) { this.buttonPermissions = buttonPermissions; }
+
+    public List<UserProjectResponse> getProjects() { return projects; }
+    public void setProjects(List<UserProjectResponse> projects) { this.projects = projects; }
 
     public Long getDefaultProjectId() { return defaultProjectId; }
     public void setDefaultProjectId(Long defaultProjectId) { this.defaultProjectId = defaultProjectId; }

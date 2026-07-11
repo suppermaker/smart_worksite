@@ -18,8 +18,12 @@ public class MyBatisFileObjectRepository implements FileObjectRepository {
     }
 
     @Override
-    public void insert(FileObject fileObject) {
-        fileObjectMapper.insert(fileObject);
+    public FileObject insert(FileObject fileObject) {
+        int inserted = fileObjectMapper.insert(fileObject);
+        if (inserted <= 0 || fileObject.getId() == null) {
+            throw new IllegalStateException("file object insert failed or id was not generated");
+        }
+        return fileObject;
     }
 
     @Override

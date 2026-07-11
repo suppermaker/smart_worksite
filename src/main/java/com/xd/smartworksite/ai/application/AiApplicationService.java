@@ -13,6 +13,8 @@ import com.xd.smartworksite.ai.repository.AiRepository;
 import com.xd.smartworksite.common.exception.BusinessException;
 import com.xd.smartworksite.common.result.ErrorCode;
 import com.xd.smartworksite.common.result.PageResult;
+import com.xd.smartworksite.common.security.SecurityUtils;
+import com.xd.smartworksite.project.application.ProjectAccessApplicationService;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
@@ -25,18 +27,22 @@ public class AiApplicationService {
     private final AiPythonServiceClient pythonClient;
     private final AiRepository aiRepository;
     private final SafeSqlExecutor safeSqlExecutor;
+    private final ProjectAccessApplicationService projectAccessApplicationService;
 
     public AiApplicationService(AiPythonServiceProperties properties,
                                 AiPythonServiceClient pythonClient,
                                 AiRepository aiRepository,
-                                SafeSqlExecutor safeSqlExecutor) {
+                                SafeSqlExecutor safeSqlExecutor,
+                                ProjectAccessApplicationService projectAccessApplicationService) {
         this.properties = properties;
         this.pythonClient = pythonClient;
         this.aiRepository = aiRepository;
         this.safeSqlExecutor = safeSqlExecutor;
+        this.projectAccessApplicationService = projectAccessApplicationService;
     }
 
     public ModelInvokeResponse invokeModel(ModelInvokeRequest request) {
+        projectAccessApplicationService.requireProjectWritableAccess(request.getProjectId());
         AiProviderResponse response = pythonClient.post(properties.getPaths().getModelInvoke(), "MODEL_INVOKE", request.getProjectId(), request);
         ModelInvokeResponse result = pythonClient.convertData(response, ModelInvokeResponse.class);
         result.setProviderTraceId(response.getTraceId());
@@ -47,6 +53,7 @@ public class AiApplicationService {
     }
 
     public AgentInvokeResponse invokeAgent(AgentInvokeRequest request) {
+        projectAccessApplicationService.requireProjectWritableAccess(request.getProjectId());
         AiProviderResponse response = pythonClient.post(properties.getPaths().getAgentInvoke(), "AGENT_INVOKE", request.getProjectId(), request);
         AgentInvokeResponse result = pythonClient.convertData(response, AgentInvokeResponse.class);
         result.setProviderTraceId(response.getTraceId());
@@ -54,6 +61,7 @@ public class AiApplicationService {
     }
 
     public RagSearchResponse searchKnowledge(RagSearchRequest request) {
+        projectAccessApplicationService.requireProjectWritableAccess(request.getProjectId());
         AiProviderResponse response = pythonClient.post(properties.getPaths().getRagSearch(), "RAG_SEARCH", request.getProjectId(), request);
         RagSearchResponse result = pythonClient.convertData(response, RagSearchResponse.class);
         result.setProviderTraceId(response.getTraceId());
@@ -61,6 +69,11 @@ public class AiApplicationService {
     }
 
     public RagIndexResponse indexKnowledge(RagIndexRequest request) {
+        projectAccessApplicationService.requireProjectWritableAccess(request.getProjectId());
+        return indexKnowledgeForSystem(request);
+    }
+
+    public RagIndexResponse indexKnowledgeForSystem(RagIndexRequest request) {
         AiProviderResponse response = pythonClient.post(properties.getPaths().getRagIndex(), "RAG_INDEX", request.getProjectId(), request);
         RagIndexResponse result = pythonClient.convertData(response, RagIndexResponse.class);
         result.setProviderTraceId(response.getTraceId());
@@ -68,6 +81,7 @@ public class AiApplicationService {
     }
 
     public RouteResponse route(RouteRequest request) {
+        projectAccessApplicationService.requireProjectWritableAccess(request.getProjectId());
         Map<String, Object> payload = pythonClient.toMap(request);
         payload.put("availableKnowledgeBases", request.getAvailableKnowledgeBaseIds().stream()
                 .map(id -> Map.<String, Object>of("id", id))
@@ -82,6 +96,7 @@ public class AiApplicationService {
     }
 
     public ContextPrepareResponse prepareContext(ContextPrepareRequest request) {
+        projectAccessApplicationService.requireProjectWritableAccess(request.getProjectId());
         AiProviderResponse response = pythonClient.post(properties.getPaths().getContextPrepare(), "CONTEXT_PREPARE", request.getProjectId(), request);
         ContextPrepareResponse result = pythonClient.convertData(response, ContextPrepareResponse.class);
         result.setProviderTraceId(response.getTraceId());
@@ -89,6 +104,7 @@ public class AiApplicationService {
     }
 
     public DatabaseQueryResponse queryDatabase(DatabaseQueryRequest request) {
+        projectAccessApplicationService.requireProjectWritableAccess(request.getProjectId());
         DataSourceRecord dataSource = aiRepository.findEnabledDataSource(request.getProjectId(), request.getDataSourceId());
         if (dataSource == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "数据源不存在或未启用");
@@ -126,9 +142,18 @@ public class AiApplicationService {
     }
 
     public PageResult<ExternalCallLogResponse> queryExternalCallLogs(ExternalCallLogQueryRequest request) {
+        if (request.getProjectId() != null) {
+            projectAccessApplicationService.requireProjectAccess(request.getProjectId());
+        }
+        List<Long> accessibleProjectIds = request.getProjectId() == null && !SecurityUtils.isPlatformAdmin()
+                ? projectAccessApplicationService.currentUserAccessibleProjectIds()
+                : null;
+        if (request.getProjectId() == null && accessibleProjectIds != null && accessibleProjectIds.isEmpty()) {
+            return new PageResult<>(request.getPageNo(), request.getPageSize(), 0, List.of());
+        }
         Page<ExternalCallLog> page = PageHelper.startPage(request.getPageNo(), request.getPageSize());
         List<ExternalCallLog> records = aiRepository.queryExternalCallLogs(
-                request.getProjectId(), request.getServiceName(), request.getCallType(), request.getStatus());
+                request.getProjectId(), accessibleProjectIds, request.getServiceName(), request.getCallType(), request.getStatus());
         List<ExternalCallLogResponse> responses = records.stream().map(this::toResponse).toList();
         return new PageResult<>(request.getPageNo(), request.getPageSize(), page.getTotal(), responses);
     }

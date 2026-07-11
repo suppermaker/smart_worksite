@@ -39,7 +39,7 @@ onMounted(loadData);
 <template>
   <div class="page" v-loading="loading">
     <el-alert v-if="error" :title="error" type="error" show-icon />
-    <div class="page-header"><div><h2 class="page-title">首页工作台</h2><p class="page-desc">{{ projectStore.currentProject?.name || '暂无项目' }} 的任务状态、资料处理和智能能力入口。</p></div></div>
+    <div class="page-header"><div><h2 class="page-title">首页工作台</h2><p class="page-desc">{{ projectStore.currentProject?.projectName || '暂无项目' }} 的任务状态、资料处理和智能能力入口。</p></div></div>
     <div v-if="!loading && !error && !reports.length"><EmptyState description="暂无工作台数据" action-text="刷新" @action="loadData" /></div>
     <template v-else>
       <div class="card-grid"><el-card v-for="item in metrics" :key="item.label" class="work-card"><div class="muted">{{ item.label }}</div><div class="metric">{{ item.value }}</div></el-card></div>

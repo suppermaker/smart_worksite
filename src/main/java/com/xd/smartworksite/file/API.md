@@ -1,4 +1,4 @@
-# 文件模块接口文档
+﻿# 文件模块接口文档
 
 本文档描述 `file` 模块当前已实现的接口，包含文件对象管理和已上传文件解析。
 
@@ -146,13 +146,13 @@ curl --noproxy '*' http://127.0.0.1:8080/api/files/1
 ### 4. 生成下载地址
 
 ```text
-GET /api/files/{fileId}/download-url
+GET /api/files/{fileId}/access-url?usage=DOWNLOAD
 ```
 
 示例：
 
 ```bash
-curl --noproxy '*' http://127.0.0.1:8080/api/files/1/download-url
+curl --noproxy '*' http://127.0.0.1:8080/api/files/1/access-url?usage=DOWNLOAD
 ```
 
 响应中的 `data.url` 是 MinIO 预签名地址，有有效期。
@@ -160,7 +160,7 @@ curl --noproxy '*' http://127.0.0.1:8080/api/files/1/download-url
 ### 5. 生成预览地址
 
 ```text
-GET /api/files/{fileId}/preview-url
+GET /api/files/{fileId}/access-url?usage=PREVIEW
 ```
 
 当前支持预览：
@@ -176,7 +176,7 @@ text/plain
 示例：
 
 ```bash
-curl --noproxy '*' http://127.0.0.1:8080/api/files/1/preview-url
+curl --noproxy '*' http://127.0.0.1:8080/api/files/1/access-url?usage=PREVIEW
 ```
 
 ### 6. 删除文件
@@ -285,7 +285,7 @@ curl --noproxy '*' -X POST http://127.0.0.1:8080/api/files/1/parse \
 ```text
 PENDING
 RUNNING
-SUCCEEDED
+SUCCESS
 FAILED
 CANCELED
 ```
@@ -319,7 +319,7 @@ curl --noproxy '*' http://127.0.0.1:8080/api/file-parse-records/1
 
 ```json
 {
-  "status": "SUCCEEDED",
+  "status": "SUCCESS",
   "progress": 100,
   "currentStage": "FINISHED",
   "contentPreview": "解析结果预览..."
@@ -342,7 +342,7 @@ curl --noproxy '*' http://127.0.0.1:8080/api/file-parse-records/1
 GET /api/file-parse-records/{recordId}/content
 ```
 
-解析记录必须是 `SUCCEEDED`。
+解析记录必须是 `SUCCESS`。
 
 示例：
 

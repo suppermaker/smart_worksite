@@ -1,5 +1,7 @@
 package com.xd.smartworksite.common.security;
 
+import com.xd.smartworksite.auth.domain.UserAccount;
+import com.xd.smartworksite.auth.mapper.UserAccountMapper;
 import com.xd.smartworksite.common.redis.RedisCacheService;
 import com.xd.smartworksite.common.redis.RedisKeys;
 import io.jsonwebtoken.Claims;
@@ -19,13 +21,18 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
+    private static final String USER_STATUS_ENABLED = "ENABLED";
 
     private final JwtTokenService jwtTokenService;
     private final RedisCacheService redisCacheService;
+    private final UserAccountMapper userAccountMapper;
 
-    public JwtAuthenticationFilter(JwtTokenService jwtTokenService, RedisCacheService redisCacheService) {
+    public JwtAuthenticationFilter(JwtTokenService jwtTokenService,
+                                   RedisCacheService redisCacheService,
+                                   UserAccountMapper userAccountMapper) {
         this.jwtTokenService = jwtTokenService;
         this.redisCacheService = redisCacheService;
+        this.userAccountMapper = userAccountMapper;
     }
 
     @Override
@@ -34,7 +41,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = extractToken(request);
         if (StringUtils.hasText(token)) {
             jwtTokenService.parseToken(token).ifPresent(claims -> {
-                if (!isBlacklisted(claims)) {
+                if (!isBlacklisted(claims) && isCurrentUserEnabled(claims)) {
                     UserPrincipal principal = jwtTokenService.toPrincipal(claims);
                     UsernamePasswordAuthenticationToken auth =
                             new UsernamePasswordAuthenticationToken(principal, token, principal.getAuthorities());
@@ -57,5 +64,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String jti = claims.getId();
         if (jti == null) return false;
         return redisCacheService.get(RedisKeys.tokenBlacklist(jti)).isPresent();
+    }
+
+    private boolean isCurrentUserEnabled(Claims claims) {
+        try {
+            Long userId = Long.valueOf(claims.getSubject());
+            UserAccount user = userAccountMapper.selectById(userId);
+            return user != null && USER_STATUS_ENABLED.equals(user.getStatus());
+        } catch (RuntimeException ex) {
+            SecurityContextHolder.clearContext();
+            throw ex;
+        }
     }
 }

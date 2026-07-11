@@ -16,10 +16,12 @@ import com.xd.smartworksite.file.dto.FileUploadRequest;
 import com.xd.smartworksite.file.infra.StorageAdapter;
 import com.xd.smartworksite.file.infra.StorageObject;
 import com.xd.smartworksite.file.repository.FileObjectRepository;
+import com.xd.smartworksite.project.application.ProjectAccessApplicationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
@@ -50,18 +52,23 @@ public class FileObjectApplicationService {
     private final StorageAdapter storageAdapter;
     private final FileProperties fileProperties;
     private final ObjectMapper objectMapper;
+    private final ProjectAccessApplicationService projectAccessApplicationService;
 
     public FileObjectApplicationService(FileObjectRepository fileObjectRepository,
                                         StorageAdapter storageAdapter,
                                         FileProperties fileProperties,
-                                        ObjectMapper objectMapper) {
+                                        ObjectMapper objectMapper,
+                                        ProjectAccessApplicationService projectAccessApplicationService) {
         this.fileObjectRepository = fileObjectRepository;
         this.storageAdapter = storageAdapter;
         this.fileProperties = fileProperties;
         this.objectMapper = objectMapper;
+        this.projectAccessApplicationService = projectAccessApplicationService;
     }
 
+    @Transactional
     public FileObjectResponse upload(FileUploadRequest request) {
+        projectAccessApplicationService.requireProjectWritableAccess(request.getProjectId());
         MultipartFile file = request.getFile();
         validateFile(file);
         FileBizType bizType = parseBizType(request.getBizType());
@@ -97,19 +104,21 @@ public class FileObjectApplicationService {
 
         try {
             fileObjectRepository.insert(fileObject);
+            if (fileObject.getId() == null) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "uploaded file id was not generated");
+            }
+            return fileObjectRepository.findById(fileObject.getId())
+                    .map(this::toResponse)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.SYSTEM_ERROR, "uploaded file record is not readable"));
         } catch (RuntimeException ex) {
             cleanupUploadedObject(storageObject.getObjectName());
             throw ex;
         }
-
-        return fileObjectRepository.findById(fileObject.getId())
-                .map(this::toResponse)
-                .orElseGet(() -> toResponse(fileObject));
     }
 
     public PageResult<FileObjectResponse> queryFiles(FileQueryRequest request) {
         normalizeQuery(request);
-        // TODO: verify current user has access to request.getProjectId() before file operation.
+        projectAccessApplicationService.requireProjectAccess(request.getProjectId());
         Page<FileObject> page = PageHelper.startPage(request.getPageNo(), request.getPageSize())
                 .doSelectPage(() -> fileObjectRepository.findPage(request));
         return new PageResult<>(
@@ -122,13 +131,13 @@ public class FileObjectApplicationService {
 
     public FileObjectResponse getFile(Long fileId) {
         FileObject fileObject = findActiveFile(fileId);
-        // TODO: verify current user has access to fileObject.getProjectId() before file operation.
+        projectAccessApplicationService.requireProjectAccess(fileObject.getProjectId());
         return toResponse(fileObject);
     }
 
     public FileAccessUrlResponse createAccessUrl(Long fileId, String usage, Integer expireSeconds) {
         FileObject fileObject = findActiveFile(fileId);
-        // TODO: verify current user has access to fileObject.getProjectId() before file operation.
+        projectAccessApplicationService.requireProjectAccess(fileObject.getProjectId());
         String normalizedUsage = usage == null ? "" : usage.trim().toUpperCase(Locale.ROOT);
         if (!"DOWNLOAD".equals(normalizedUsage) && !"PREVIEW".equals(normalizedUsage)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "usage must be DOWNLOAD or PREVIEW");
@@ -141,7 +150,7 @@ public class FileObjectApplicationService {
 
     public void deleteFile(Long fileId) {
         FileObject fileObject = findActiveFile(fileId);
-        // TODO: verify current user has access to fileObject.getProjectId() before file operation.
+        projectAccessApplicationService.requireProjectWritableAccess(fileObject.getProjectId());
         try {
             storageAdapter.delete(fileObject.getObjectName());
         } catch (RuntimeException ex) {
@@ -264,7 +273,10 @@ public class FileObjectApplicationService {
     }
 
     private String normalizeFilename(String originalFilename) {
-        String filename = originalFilename == null || originalFilename.isBlank() ? "file" : originalFilename.trim();
+        if (originalFilename == null || originalFilename.isBlank()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "file original filename is required");
+        }
+        String filename = originalFilename.trim();
         filename = filename.replace('\\', '/');
         int lastSeparator = filename.lastIndexOf('/');
         if (lastSeparator >= 0) {

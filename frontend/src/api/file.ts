@@ -1,14 +1,14 @@
 ﻿import request, { downloadFile } from '../utils/request';
 import { mockFiles } from '../mocks/file';
-import type { FileObject, ID, PageQuery, PageResult } from './types';
+import type { FileAccessUrl, FileObject, ID, PageQuery, PageResult } from './types';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
-export async function uploadFile(projectId: ID, file: File, businessType = 'COMMON') {
-  if (useMock) return { ...mockFiles[0], projectId, originalName: file.name } satisfies FileObject;
+export async function uploadFile(projectId: ID, file: File, businessType = 'KNOWLEDGE_DOC') {
+  if (useMock) return { ...mockFiles[0], projectId, fileName: file.name } satisfies FileObject;
   const form = new FormData();
   form.append('projectId', String(projectId));
-  form.append('businessType', businessType);
+  form.append('bizType', businessType);
   form.append('file', file);
   return request.post<FileObject>('/files', form);
 }
@@ -20,5 +20,7 @@ export async function fetchFiles(params: PageQuery = {}) {
 
 export function downloadByFileId(fileId: ID, filename?: string) {
   if (useMock) return downloadFile('', { filename, data: 'mock file content' });
-  return downloadFile(`/files/${fileId}/download`, { filename });
+  return request
+    .get<FileAccessUrl>(`/files/${fileId}/access-url`, { params: { usage: 'DOWNLOAD' } })
+    .then((access) => downloadFile(access.url, { filename }));
 }

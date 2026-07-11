@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Min;
 public class ProjectQueryRequest {
 
     private String keyword;
+    private String status;
 
     @Min(1)
     private int pageNo = 1;
@@ -20,6 +21,14 @@ public class ProjectQueryRequest {
 
     public void setKeyword(String keyword) {
         this.keyword = keyword;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 
     public int getPageNo() {

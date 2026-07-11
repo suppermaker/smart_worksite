@@ -38,9 +38,51 @@
         FROM role WHERE id = #{roleId} AND deleted = 0
     </select>
 
+    <select id="selectByRoleCode" resultMap="RoleResultMap">
+        SELECT id, role_code, role_name, description, status, created_at, updated_at
+        FROM role WHERE role_code = #{roleCode} AND deleted = 0
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="role.id">
+        INSERT INTO role (role_code, role_name, description, status, created_by, updated_by)
+        VALUES (#{role.roleCode}, #{role.roleName}, #{role.description}, #{role.status}, #{operatorId}, #{operatorId})
+    </insert>
+
+    <update id="update">
+        UPDATE role
+        SET role_name = #{role.roleName},
+            description = #{role.description},
+            updated_by = #{operatorId}
+        WHERE id = #{role.id} AND deleted = 0
+    </update>
+
+    <update id="updateStatus">
+        UPDATE role
+        SET status = #{status}, updated_by = #{operatorId}
+        WHERE id = #{roleId} AND deleted = 0
+    </update>
+
+    <update id="softDelete">
+        UPDATE role
+        SET deleted = 1, updated_by = #{operatorId}
+        WHERE id = #{roleId} AND deleted = 0
+    </update>
+
+    <select id="countActiveUsersByRoleId" resultType="int">
+        SELECT COUNT(1)
+        FROM user_role
+        WHERE role_id = #{roleId}
+          AND deleted = 0
+    </select>
+
     <select id="selectAllPermissions" resultMap="PermissionResultMap">
         SELECT id, permission_code, permission_name, permission_type, parent_id, created_at, updated_at
         FROM permission WHERE deleted = 0 ORDER BY id ASC
+    </select>
+
+    <select id="selectPermissionById" resultMap="PermissionResultMap">
+        SELECT id, permission_code, permission_name, permission_type, parent_id, created_at, updated_at
+        FROM permission WHERE id = #{permissionId} AND deleted = 0
     </select>
 
     <select id="selectPermissionIdsByRoleId" resultType="java.lang.Long">

@@ -21,4 +21,6 @@ public interface ProjectMemberMapper {
                                    @Param("operatorId") Long operatorId);
 
     List<Long> selectProjectIdsByUserId(@Param("userId") Long userId);
+
+    List<ProjectMember> selectEnabledByUserId(@Param("userId") Long userId);
 }

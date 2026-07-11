@@ -6,7 +6,10 @@ import com.xd.smartworksite.project.application.ProjectApplicationService;
 import com.xd.smartworksite.project.dto.ProjectCreateRequest;
 import com.xd.smartworksite.project.dto.ProjectQueryRequest;
 import com.xd.smartworksite.project.dto.ProjectResponse;
+import com.xd.smartworksite.project.dto.ProjectSettingsRequest;
+import com.xd.smartworksite.project.dto.ProjectSettingsResponse;
 import com.xd.smartworksite.project.dto.ProjectStatusRequest;
+import com.xd.smartworksite.project.dto.ProjectStatisticsResponse;
 import com.xd.smartworksite.project.dto.ProjectUpdateRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -61,5 +64,44 @@ public class ProjectController {
                                                  @Valid @RequestBody ProjectStatusRequest request) {
         projectApplicationService.updateProjectStatus(projectId, request.getStatus());
         return ApiResponse.success(null);
+    }
+
+    @PostMapping("/{projectId}/enable")
+    @PreAuthorize("hasAuthority('project:manage')")
+    public ApiResponse<Void> enableProject(@PathVariable Long projectId) {
+        projectApplicationService.updateProjectStatus(projectId, "ENABLED");
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/{projectId}/disable")
+    @PreAuthorize("hasAuthority('project:manage')")
+    public ApiResponse<Void> disableProject(@PathVariable Long projectId) {
+        projectApplicationService.updateProjectStatus(projectId, "DISABLED");
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/{projectId}/archive")
+    @PreAuthorize("hasAuthority('project:manage')")
+    public ApiResponse<Void> archiveProject(@PathVariable Long projectId) {
+        projectApplicationService.updateProjectStatus(projectId, "ARCHIVED");
+        return ApiResponse.success(null);
+    }
+
+    @GetMapping("/{projectId}/settings")
+    public ApiResponse<ProjectSettingsResponse> getProjectSettings(@PathVariable Long projectId) {
+        return ApiResponse.success(projectApplicationService.getProjectSettings(projectId));
+    }
+
+    @PutMapping("/{projectId}/settings")
+    @PreAuthorize("hasAuthority('project:manage')")
+    public ApiResponse<ProjectSettingsResponse> updateProjectSettings(
+            @PathVariable Long projectId,
+            @Valid @RequestBody ProjectSettingsRequest request) {
+        return ApiResponse.success(projectApplicationService.updateProjectSettings(projectId, request));
+    }
+
+    @GetMapping("/{projectId}/statistics")
+    public ApiResponse<ProjectStatisticsResponse> getProjectStatistics(@PathVariable Long projectId) {
+        return ApiResponse.success(projectApplicationService.getProjectStatistics(projectId));
     }
 }

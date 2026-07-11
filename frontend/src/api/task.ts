@@ -15,11 +15,11 @@ export async function fetchTaskStages(taskId: ID) {
 }
 
 export async function retryTask(taskId: ID) {
-  if (useMock) return { taskId, status: 'PROCESSING' };
-  return request.post(`/tasks/${taskId}/retry`);
+  if (useMock) return { ...mockTaskDetail, taskId, status: 'QUEUED' } satisfies TaskDetail;
+  return request.post<TaskDetail>(`/tasks/${taskId}/retry`);
 }
 
 export async function cancelTask(taskId: ID) {
-  if (useMock) return { taskId, status: 'CANCELLED' };
-  return request.post(`/tasks/${taskId}/cancel`);
+  if (useMock) return { ...mockTaskDetail, taskId, status: 'CANCELED' } satisfies TaskDetail;
+  return request.post<TaskDetail>(`/tasks/${taskId}/cancel`);
 }

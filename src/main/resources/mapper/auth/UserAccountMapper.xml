@@ -87,6 +87,17 @@
         WHERE ur.user_id = #{userId} AND ur.deleted = 0
     </select>
 
+    <select id="selectPermissionCodesByType" resultType="string">
+        SELECT DISTINCT p.permission_code
+        FROM user_role ur
+        INNER JOIN role r ON ur.role_id = r.id AND r.deleted = 0 AND r.status = 'ENABLED'
+        INNER JOIN role_permission rp ON r.id = rp.role_id AND rp.deleted = 0
+        INNER JOIN permission p ON rp.permission_id = p.id AND p.deleted = 0
+        WHERE ur.user_id = #{userId}
+          AND ur.deleted = 0
+          AND p.permission_type = #{permissionType}
+    </select>
+
     <select id="selectDefaultProjectId" resultType="java.lang.Long">
         SELECT project_id FROM project_member
         WHERE user_id = #{userId} AND deleted = 0 AND status = 'ENABLED'

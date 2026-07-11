@@ -2,7 +2,8 @@ package com.xd.smartworksite.report.domain;
 
 public enum ReportStatus {
     DRAFT,
-    GENERATING,
+    PENDING,
+    PROCESSING,
     COMPLETED,
     FAILED,
     ARCHIVED,

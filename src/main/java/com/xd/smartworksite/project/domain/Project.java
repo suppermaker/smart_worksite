@@ -10,6 +10,7 @@ public class Project {
     private String location;
     private String status;
     private String description;
+    private String settings;
     private Long createdBy;
     private Long updatedBy;
     private LocalDateTime createdAt;
@@ -61,6 +62,14 @@ public class Project {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getSettings() {
+        return settings;
+    }
+
+    public void setSettings(String settings) {
+        this.settings = settings;
     }
 
     public Long getCreatedBy() { return createdBy; }

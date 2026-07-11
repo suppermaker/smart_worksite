@@ -19,18 +19,29 @@ public class MyBatisTemplateRepository implements TemplateRepository {
 
     @Override
     public FileObjectRecord saveFileObject(FileObjectRecord fileObject) {
-        templateMapper.insertFileObject(fileObject);
+        int inserted = templateMapper.insertFileObject(fileObject);
+        if (inserted <= 0 || fileObject.getId() == null) {
+            throw new IllegalStateException("template file object insert failed or id was not generated");
+        }
         return fileObject;
     }
 
     @Override
-    public void updateFileBizId(Long fileId, Long bizId) {
-        templateMapper.updateFileBizId(fileId, bizId);
+    public Optional<FileObjectRecord> findFileObjectById(Long fileId) {
+        return Optional.ofNullable(templateMapper.selectFileObjectById(fileId));
+    }
+
+    @Override
+    public int updateFileBizId(Long fileId, Long bizId) {
+        return templateMapper.updateFileBizId(fileId, bizId);
     }
 
     @Override
     public Template save(Template template) {
-        templateMapper.insertTemplate(template);
+        int inserted = templateMapper.insertTemplate(template);
+        if (inserted <= 0 || template.getId() == null) {
+            throw new IllegalStateException("template insert failed or id was not generated");
+        }
         return template;
     }
 
@@ -40,22 +51,22 @@ public class MyBatisTemplateRepository implements TemplateRepository {
     }
 
     @Override
-    public List<Template> findPage(Long projectId, String templateCategory, String templateType, String status, String keyword) {
-        return templateMapper.selectPage(projectId, templateCategory, templateType, status, keyword);
+    public List<Template> findPage(Long projectId, List<Long> accessibleProjectIds, String templateCategory, String templateType, String status, String keyword) {
+        return templateMapper.selectPage(projectId, accessibleProjectIds, templateCategory, templateType, status, keyword);
     }
 
     @Override
-    public void update(Template template) {
-        templateMapper.updateTemplate(template);
+    public int update(Template template) {
+        return templateMapper.updateTemplate(template);
     }
 
     @Override
-    public void updateStatus(Long templateId, String status) {
-        templateMapper.updateStatus(templateId, status);
+    public int updateStatus(Long templateId, String status) {
+        return templateMapper.updateStatus(templateId, status);
     }
 
     @Override
-    public void delete(Long templateId) {
-        templateMapper.logicalDelete(templateId);
+    public int delete(Long templateId) {
+        return templateMapper.logicalDelete(templateId);
     }
 }

@@ -77,7 +77,7 @@
           and file_id = #{fileId}
           and source_file_hash = #{sourceFileHash}
           and result_format = #{resultFormat}
-          and status = 'SUCCEEDED'
+          and status = 'SUCCESS'
           and result_object_name is not null
           and deleted = 0
         order by finished_at desc, id desc
@@ -97,7 +97,7 @@
 
     <update id="updateSucceeded" parameterType="com.xd.smartworksite.file.domain.FileParseRecord">
         update file_parse_record
-        set status = 'SUCCEEDED',
+        set status = 'SUCCESS',
             progress = 100,
             current_stage = #{currentStage},
             result_object_name = #{resultObjectName},

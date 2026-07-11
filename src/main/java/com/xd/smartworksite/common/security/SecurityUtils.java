@@ -14,7 +14,7 @@ public final class SecurityUtils {
         if (auth != null && auth.getPrincipal() instanceof UserPrincipal principal) {
             return principal;
         }
-        throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
+        throw new BusinessException(ErrorCode.UNAUTHORIZED, "\u672a\u767b\u5f55");
     }
 
     public static Long getCurrentUserId() {

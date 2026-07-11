@@ -116,6 +116,12 @@
         <if test="projectId != null">
             and project_id = #{projectId}
         </if>
+        <if test="projectId == null and accessibleProjectIds != null">
+            and project_id in
+            <foreach collection="accessibleProjectIds" item="projectIdItem" open="(" separator="," close=")">
+                #{projectIdItem}
+            </foreach>
+        </if>
         <if test="reportType != null and reportType != ''">
             and report_type = #{reportType}
         </if>
