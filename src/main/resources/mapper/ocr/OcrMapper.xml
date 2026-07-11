@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xd.smartworksite.ocr.mapper.OcrMapper">
+
+    <resultMap id="OcrRecordMap" type="com.xd.smartworksite.ocr.domain.OcrRecord">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="ocrType" column="ocr_type"/>
+        <result property="fileId" column="file_id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="status" column="status"/>
+        <result property="fieldsJson" column="fields_json"/>
+        <result property="customFieldsJson" column="custom_fields_json"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="OcrRecordColumns">
+        id, project_id, ocr_type, file_id, task_id, status, fields_json,
+        custom_fields_json, error_message, created_at, updated_at
+    </sql>
+
+    <insert id="insertRecord" useGeneratedKeys="true" keyProperty="id">
+        insert into ocr_record (
+            project_id, ocr_type, file_id, task_id, status, fields_json,
+            custom_fields_json, error_message, created_by, updated_by, deleted
+        ) values (
+            #{projectId}, #{ocrType}, #{fileId}, #{taskId}, #{status}, #{fieldsJson},
+            #{customFieldsJson}, #{errorMessage}, 1, 1, 0
+        )
+    </insert>
+
+    <select id="selectRecordById" resultMap="OcrRecordMap">
+        select <include refid="OcrRecordColumns"/>
+        from ocr_record
+        where id = #{recordId}
+          and deleted = 0
+    </select>
+
+    <select id="selectRecordPage" resultMap="OcrRecordMap">
+        select <include refid="OcrRecordColumns"/>
+        from ocr_record
+        where deleted = 0
+          and project_id = #{projectId}
+        <if test="ocrType != null and ocrType != ''">
+          and ocr_type = #{ocrType}
+        </if>
+        <if test="status != null and status != ''">
+          and status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+          and cast(fields_json as char) like concat('%', #{keyword}, '%')
+        </if>
+        order by created_at desc, id desc
+    </select>
+
+    <update id="updateRecordTask">
+        update ocr_record
+        set task_id = #{taskId}, updated_by = 1
+        where id = #{recordId}
+          and deleted = 0
+    </update>
+
+    <update id="updateRecordStatus">
+        update ocr_record
+        set status = #{status},
+            error_message = #{errorMessage},
+            updated_by = 1
+        where id = #{recordId}
+          and deleted = 0
+    </update>
+
+    <update id="updateRecordSuccess">
+        update ocr_record
+        set status = 'SUCCESS',
+            fields_json = #{fieldsJson},
+            error_message = null,
+            updated_by = 1
+        where id = #{recordId}
+          and deleted = 0
+    </update>
+
+    <update id="updateRecordFields">
+        update ocr_record
+        set fields_json = #{fieldsJson},
+            updated_by = 1
+        where id = #{recordId}
+          and deleted = 0
+    </update>
+
+    <update id="markRecordDeleted">
+        update ocr_record
+        set deleted = 1,
+            updated_by = 1
+        where id = #{recordId}
+          and deleted = 0
+    </update>
+
+    <insert id="insertTask" useGeneratedKeys="true" keyProperty="id">
+        insert into generate_task (
+            project_id, task_type, biz_type, biz_id, status, current_stage,
+            max_retry_count, created_by, updated_by, deleted
+        ) values (
+            #{projectId}, #{taskType}, #{bizType}, #{bizId}, #{status}, #{currentStage},
+            #{maxRetryCount}, 1, 1, 0
+        )
+    </insert>
+
+    <update id="updateTaskBizId">
+        update generate_task
+        set biz_id = #{bizId}, updated_by = 1
+        where id = #{taskId}
+          and deleted = 0
+    </update>
+
+    <update id="updateTaskStatus">
+        update generate_task
+        set status = #{status},
+            current_stage = #{currentStage},
+            error_message = #{errorMessage},
+            started_at = case when #{status} = 'RUNNING' then coalesce(started_at, current_timestamp) else started_at end,
+            finished_at = case when #{status} in ('SUCCESS', 'FAILED', 'CANCELED') then current_timestamp else finished_at end,
+            updated_by = 1
+        where id = #{taskId}
+          and deleted = 0
+    </update>
+
+    <insert id="insertStageLog" useGeneratedKeys="true" keyProperty="id">
+        insert into task_stage_log (
+            project_id, task_id, stage_code, status, input_summary, output_summary,
+            error_message, started_at, finished_at, cost_ms, created_by, updated_by, deleted
+        ) values (
+            #{projectId}, #{taskId}, #{stageCode}, #{status}, #{inputSummary}, #{outputSummary},
+            #{errorMessage},
+            case when #{status} in ('RUNNING', 'SUCCESS', 'FAILED') then current_timestamp else null end,
+            case when #{status} in ('SUCCESS', 'FAILED') then current_timestamp else null end,
+            #{costMs}, 1, 1, 0
+        )
+    </insert>
+</mapper>

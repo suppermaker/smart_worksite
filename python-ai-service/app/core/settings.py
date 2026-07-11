@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     qwen_api_key: str = ""
     qwen_model: str = "qwen-plus"
+    qwen_vl_endpoint: str = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+    qwen_vl_api_key: str = ""
+    qwen_vl_model: str = "qwen-vl-plus"
+    qwen_vl_timeout_seconds: int = 120
+    qwen_vl_max_image_bytes: int = 10 * 1024 * 1024
+    qwen_vl_max_tokens: int = 8192
     qwen_embedding_model: str = "text-embedding-v4"
     qwen_embedding_dimensions: int = 1024
     qwen_embedding_batch_size: int = 10

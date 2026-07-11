@@ -141,6 +141,151 @@ def test_qwen_rerank_payload_supports_qwen3_and_legacy_styles():
     assert qwen3["documents"] == ["wear helmet"]
     assert qwen3["top_n"] == 1
 
+
+def test_qwen_vl_converts_image_url_to_data_url_before_provider_call(monkeypatch):
+    import asyncio
+    import base64
+    from app.services import qwen_client as qwen_module
+
+    settings = Settings(
+        qwen_vl_api_key="test-key",
+        qwen_vl_endpoint="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    )
+    client = QwenClient(settings)
+    image_bytes = b"fake-image"
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+        text = ""
+
+        def __init__(self, content=b"", headers=None, body=None):
+            self.content = content
+            self.headers = headers or {}
+            self._body = body or {}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._body
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url):
+            assert url == "http://minio.local/id-card.jpg"
+            captured["download_trust_env"] = self.kwargs.get("trust_env")
+            return FakeResponse(content=image_bytes, headers={"content-type": "image/jpeg"})
+
+        async def post(self, url, headers=None, json=None):
+            assert url == settings.qwen_vl_endpoint
+            captured["image_url"] = json["messages"][0]["content"][1]["image_url"]["url"]
+            captured["max_tokens"] = json["max_tokens"]
+            return FakeResponse(body={
+                "choices": [{
+                    "message": {
+                        "content": "{\"ocrType\":\"ID_CARD\",\"confidence\":1,\"fields\":[]}"
+                    }
+                }],
+                "usage": {"prompt_tokens": 1},
+            })
+
+    monkeypatch.setattr(qwen_module.httpx, "AsyncClient", FakeAsyncClient)
+    raw, usage = asyncio.run(client.vision_json_chat(
+        "请输出JSON",
+        "http://minio.local/id-card.jpg",
+        "image/jpeg",
+    ))
+
+    expected = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")
+    assert captured["download_trust_env"] is False
+    assert captured["image_url"] == expected
+    assert captured["max_tokens"] == settings.qwen_vl_max_tokens
+    assert raw["ocrType"] == "ID_CARD"
+    assert usage["provider"] == "QWEN_VL"
+
+
+def test_qwen_vl_retries_once_when_provider_json_is_invalid(monkeypatch):
+    import asyncio
+    from app.services import qwen_client as qwen_module
+
+    settings = Settings(
+        qwen_vl_api_key="test-key",
+        qwen_vl_endpoint="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        qwen_vl_max_tokens=99,
+    )
+    client = QwenClient(settings)
+    payloads = []
+
+    class FakeResponse:
+        text = ""
+
+        def __init__(self, content=b"", headers=None, body=None):
+            self.content = content
+            self.headers = headers or {}
+            self._body = body or {}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._body
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url):
+            return FakeResponse(content=b"fake-image", headers={"content-type": "image/jpeg"})
+
+        async def post(self, url, headers=None, json=None):
+            payloads.append(json)
+            if len(payloads) == 1:
+                return FakeResponse(body={
+                    "choices": [{
+                        "message": {"content": "{\"ocrType\":\"ID_CARD\" \"fields\":[]}"},
+                        "finish_reason": "stop",
+                    }],
+                    "usage": {"prompt_tokens": 1},
+                })
+            return FakeResponse(body={
+                "choices": [{
+                    "message": {
+                        "content": "{\"ocrType\":\"ID_CARD\",\"confidence\":1,\"fields\":[]}"
+                    },
+                    "finish_reason": "stop",
+                }],
+                "usage": {"prompt_tokens": 2},
+            })
+
+    monkeypatch.setattr(qwen_module.httpx, "AsyncClient", FakeAsyncClient)
+    raw, usage = asyncio.run(client.vision_json_chat(
+        "请输出JSON",
+        "http://minio.local/id-card.jpg",
+        "image/jpeg",
+    ))
+
+    assert len(payloads) == 2
+    assert payloads[0]["max_tokens"] == 99
+    assert "上一次输出不是合法JSON" in payloads[1]["messages"][0]["content"][0]["text"]
+    assert raw["ocrType"] == "ID_CARD"
+    assert usage["prompt_tokens"] == 2
+
+
 def test_database_summarize_result_fails_fast_when_qwen_fails(monkeypatch):
     from app.api import routes
 
@@ -169,4 +314,3 @@ def test_database_summarize_result_fails_fast_when_qwen_fails(monkeypatch):
     assert body["success"] is False
     assert body["errorCode"] == "RuntimeError"
     assert "summary service down" in body["errorMessage"]
-

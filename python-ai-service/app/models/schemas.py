@@ -148,3 +148,36 @@ class DatabaseSummarizeData(BaseModel):
     summary: str
     insights: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class OcrFilePayload(BaseModel):
+    fileId: int
+    fileName: str
+    contentType: str | None = None
+    downloadUrl: str
+
+
+class OcrRecognizeRequest(BaseModel):
+    projectId: int
+    recordId: int
+    ocrType: str
+    file: OcrFilePayload
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class OcrFieldData(BaseModel):
+    fieldKey: str
+    fieldName: str
+    fieldValue: str = ""
+    confidence: float = 0
+    location: str | None = None
+    pageNo: int | None = None
+    evidence: str | None = None
+
+
+class OcrRecognizeData(BaseModel):
+    ocrType: str
+    confidence: float = 0
+    fields: list[OcrFieldData] = Field(default_factory=list)
+    extras: dict[str, Any] = Field(default_factory=dict)
+    raw: dict[str, Any] = Field(default_factory=dict)

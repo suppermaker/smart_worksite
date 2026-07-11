@@ -93,7 +93,7 @@ app:
       connect-timeout-ms: ${AI_PYTHON_CONNECT_TIMEOUT_MS:5000}
       read-timeout-ms: ${AI_PYTHON_READ_TIMEOUT_MS:120000}
       retry-count: ${AI_PYTHON_RETRY_COUNT:1}
-      api-key: ${AI_PYTHON_API_KEY:}
+      api-key: ${AI_PYTHON_API_KEY:dev-ai-service-key}
       paths:
         model-invoke: /v1/model/invoke
         agent-invoke: /v1/agent/invoke
@@ -103,6 +103,7 @@ app:
         context-prepare: /v1/context/prepare
         database-generate-query: /v1/database/generate-query
         database-summarize-result: /v1/database/summarize-result
+        ocr-recognize: /v1/ocr/recognize
       database:
         max-rows: ${AI_DATABASE_MAX_ROWS:100}
         query-timeout-seconds: ${AI_DATABASE_QUERY_TIMEOUT_SECONDS:15}

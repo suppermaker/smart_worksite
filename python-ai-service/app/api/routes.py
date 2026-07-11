@@ -20,6 +20,8 @@ from app.models.schemas import (
     DatabaseGenerateQueryData,
     DatabaseSummarizeRequest,
     DatabaseSummarizeData,
+    OcrRecognizeRequest,
+    OcrRecognizeData,
 )
 from app.services.qwen_client import QwenClient
 from app.services.model_service import ModelService, AgentService
@@ -27,6 +29,7 @@ from app.services.rag_service import RagService
 from app.services.route_context_service import RouteService, ContextService
 from app.services.database_service import DatabaseQaService
 from app.services.agent_tools import ToolRegistry, ToolSpec
+from app.services.ocr_service import OcrService
 
 router = APIRouter(prefix="/v1", dependencies=[Depends(verify_service_key)])
 
@@ -73,6 +76,7 @@ def services():
         "route": RouteService(qwen),
         "context": ContextService(qwen),
         "database": db,
+        "ocr": OcrService(qwen),
     }
 
 
@@ -126,4 +130,10 @@ async def database_generate_query(request: DatabaseGenerateQueryRequest):
 @router.post("/database/summarize-result", response_model=StandardResponse[DatabaseSummarizeData])
 async def database_summarize_result(request: DatabaseSummarizeRequest):
     data, usage = await services()["database"].summarize_result(request)
+    return ok(data, usage)
+
+
+@router.post("/ocr/recognize", response_model=StandardResponse[OcrRecognizeData])
+async def ocr_recognize(request: OcrRecognizeRequest):
+    data, usage = await services()["ocr"].recognize(request)
     return ok(data, usage)

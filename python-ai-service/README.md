@@ -10,7 +10,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env
-# set QWEN_API_KEY in .env
+# set QWEN_API_KEY and QWEN_VL_API_KEY in .env when using provider-backed features
 uvicorn app.main:app --host 0.0.0.0 --port 8015
 ```
 
@@ -42,3 +42,22 @@ Rerank providers:
 - Any non-`QWEN` value uses the built-in lexical rerank fallback.
 
 Agent tool execution uses a registry. The built-in `rag_search` tool lets the Agent retrieve indexed project knowledge during reasoning; `database_query_plan` lets the Agent ask the database-Q&A planner for read-only SQL plans.
+
+## OCR
+
+OCR recognition is available at `POST /v1/ocr/recognize`. Java sends project ID, OCR record ID, OCR type, a temporary file URL, and optional invoice/custom field definitions. For image inputs, this service downloads the temporary URL locally, converts the image to a `data:image/...;base64,...` URL, and then calls Qwen VL. This avoids sending MinIO signed URLs to DashScope and avoids requiring DashScope to access local or private MinIO endpoints.
+
+The service returns normalized `ocrType`, `confidence`, `fields`, `extras`, and `raw` data.
+
+Qwen VL configuration:
+
+```env
+QWEN_VL_ENDPOINT=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+QWEN_VL_API_KEY=
+QWEN_VL_MODEL=qwen-vl-plus
+QWEN_VL_TIMEOUT_SECONDS=120
+QWEN_VL_MAX_IMAGE_BYTES=10485760
+QWEN_VL_MAX_TOKENS=8192
+```
+
+Supported OCR types are `ID_CARD`, `LICENSE_PLATE`, `INVOICE`, and `CUSTOM`. Contract extraction should use `CUSTOM` with field definitions such as party A, party B, contract amount, and payment terms. PDF inputs still require provider-supported file URLs or a future PDF-to-image preprocessing path.

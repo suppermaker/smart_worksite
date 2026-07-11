@@ -101,6 +101,10 @@ Python 智能算法服务
 - 任务管理接口：任务列表、详情、阶段日志、状态统计、失败任务重试、等待/运行中任务取消请求和项目级访问校验。
 - 任务 outbox 基础投递：以 MySQL `task_outbox` 为事实源，按配置投递任务事件到 Redis 队列，并记录失败原因和重试时间。
 - 任务 Worker 基础状态机：领取 `QUEUED` 任务、写入 worker 租约和心跳、按 owner 校验完成成功或失败；执行业务前校验项目仍为可写状态；Redis 队列坏消息会记录原因和 payload 摘要后拒绝，不 claim 任务。
+- 报告创建、列表、详情、重新生成、下载 URL、版本记录和 CryptoAgentV3 集成。
+- OCR 识别后端接口：提交识别、列表、详情、重试、删除、字段修订、结果 JSON 查询和类型模板。
+- Java AI 适配层：模型调用、Agent 调用、RAG 检索/索引、数据库问答、路由、上下文准备和外部调用日志。
+- Python 智能算法服务：新增 `/v1/ocr/recognize`，封装 Qwen VL 完成身份证、车牌、发票和自定义字段 OCR 抽取。
 - Redis 基础封装、MinIO 适配、Flyway 迁移、MyBatis XML、PageHelper 分页。
 
 前端：
@@ -118,6 +122,7 @@ Python 智能算法服务
 - OCR 模块由其他成员负责，当前 P0 后端计划不推进 OCR 业务接口。
 - 数据源管理页面、数据库问答历史和数据源权限管理。
 - 知识问答业务页面与 Java/Python AI 适配层联调完善。
+- 合规审查后端业务实现。
 - Python 智能算法服务生产化。
 - Agent 工具注册、业务工具执行审计和多步骤任务编排完善。
 - 生产部署脚本、监控告警和审计报表。
@@ -485,13 +490,16 @@ src/main/resources/db/migration
 
 ## 外部服务配置
 
-### Qwen-VL 文档解析
+### Qwen-VL OCR / 文档解析
 
 ```env
 QWEN_VL_ENDPOINT=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
 QWEN_VL_API_KEY=
 QWEN_VL_MODEL=qwen-vl-plus
+QWEN_VL_MAX_TOKENS=8192
 ```
+
+OCR 识别由 `python-ai-service` 封装 Qwen VL，Java 后端只调用 Python OCR API，不直接调用 `QWEN_VL_ENDPOINT`。图片 OCR 会在 Python 侧下载 Java 生成的临时文件 URL，并转为 `data:image/...;base64,...` 后发送给 Qwen VL，避免把本地或内网 MinIO 临时签名 URL 直接转发给云端模型服务。
 
 ### CryptoAgentV3 报告生成
 

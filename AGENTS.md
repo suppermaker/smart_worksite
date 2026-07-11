@@ -240,6 +240,8 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - The Python intelligent algorithm service lives under `python-ai-service/`.
 - Qwen API keys must stay in the Python service `.env` or environment variables and must not be written to Java config, docs, SQL, or logs.
 - Java backend calls Python through `app.ai.python-service.*` and sends `X-AI-Service-Key` when configured.
+- OCR recognition may use Qwen VL, but Qwen VL must be wrapped by `python-ai-service`; Java OCR modules must call the Python OCR API instead of calling `QWEN_VL_ENDPOINT` directly.
+- For image OCR, Python should download Java-generated temporary MinIO URLs and send Qwen VL `data:image/...;base64,...` image URLs instead of forwarding signed MinIO URLs to the cloud provider.
 - Database Q&A uses Python to generate SQL and summaries, but Java must validate and execute only safe MySQL read-only SQL.
 - RAG, Agent, model reasoning, context compression, and semantic routing are Python responsibilities; Java owns project isolation, logging, error mapping, and API responses.
 
