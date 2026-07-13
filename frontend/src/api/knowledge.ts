@@ -8,16 +8,18 @@ const mockBaseStorageKey = 'smart_worksite_mock_knowledge_bases';
 const mockDocumentStorageKey = 'smart_worksite_mock_knowledge_documents';
 
 function readMockState<T>(key: string, fallback: T[]) {
+  const raw = localStorage.getItem(key);
+  if (!raw) return [...fallback];
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) as T[] : [...fallback];
-  } catch {
-    return [...fallback];
+    return JSON.parse(raw) as T[];
+  } catch (error) {
+    console.error(`Mock knowledge state is corrupted: ${key}`, error);
+    throw new Error(`本地知识库 mock 缓存解析失败：${key}`);
   }
 }
 
-const mockBaseState = readMockState<KnowledgeBase>(mockBaseStorageKey, mockKnowledgeBases);
-const mockDocumentState = readMockState<KnowledgeDocument>(mockDocumentStorageKey, mockKnowledgeDocuments);
+const mockBaseState = useMock ? readMockState<KnowledgeBase>(mockBaseStorageKey, mockKnowledgeBases) : [];
+const mockDocumentState = useMock ? readMockState<KnowledgeDocument>(mockDocumentStorageKey, mockKnowledgeDocuments) : [];
 
 function saveMockState() {
   localStorage.setItem(mockBaseStorageKey, JSON.stringify(mockBaseState));
@@ -50,8 +52,9 @@ export async function uploadKnowledgeDocument(knowledgeBaseId: ID, file: File) {
   if (useMock) {
     const now = new Date().toISOString();
     const base = mockBaseState.find((item) => String(item.knowledgeBaseId) === String(knowledgeBaseId));
+    if (!base) throw new Error(`知识库不存在，无法上传 mock 文档：${knowledgeBaseId}`);
     const id = createMockId();
-    const created = { documentId: id, projectId: base?.projectId || 0, knowledgeBaseId, fileId: id + 1, title: file.name, sourceType: 'UPLOAD', indexStatus: 'PENDING', taskId: id + 2, createdAt: now, updatedAt: now } satisfies KnowledgeDocument;
+    const created = { documentId: id, projectId: base.projectId, knowledgeBaseId, fileId: id + 1, title: file.name, sourceType: 'UPLOAD', indexStatus: 'PENDING', taskId: id + 2, createdAt: now, updatedAt: now } satisfies KnowledgeDocument;
     mockDocumentState.unshift(created);
     saveMockState();
     return created;
@@ -70,7 +73,7 @@ export async function triggerDocumentIndex(documentId: ID) {
       saveMockState();
       return item;
     }
-    return { ...mockKnowledgeDocuments[0], documentId, indexStatus: 'INDEXING' } satisfies KnowledgeDocument;
+    throw new Error(`知识文档不存在，无法提交 mock 入库任务：${documentId}`);
   }
   return request.post<KnowledgeDocument>(`/knowledge-documents/${documentId}/index`);
 }

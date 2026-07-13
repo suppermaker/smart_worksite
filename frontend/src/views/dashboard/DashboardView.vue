@@ -5,18 +5,20 @@ import TaskProgress from '../../components/common/TaskProgress.vue';
 import EmptyState from '../../components/common/EmptyState.vue';
 import { useProjectStore } from '../../stores/project';
 import { fetchReports } from '../../api/report';
-import type { ReportItem } from '../../api/types';
+import { fetchProjectStatistics } from '../../api/project';
+import type { ProjectStatistics, ReportItem } from '../../api/types';
 
 const projectStore = useProjectStore();
 const loading = ref(false);
 const error = ref('');
 const reports = ref<ReportItem[]>([]);
+const statistics = ref<ProjectStatistics | null>(null);
 const tasks = computed(() => reports.value.map((item) => ({ name: item.reportName, status: item.status, progress: item.progress })));
 const metrics = computed(() => [
-  { label: '知识库数量', value: 6 },
+  { label: '知识库数量', value: statistics.value?.knowledgeBaseCount ?? 0 },
   { label: '待处理任务', value: tasks.value.filter((item) => item.status === 'PROCESSING').length },
-  { label: '最近报告', value: reports.value.length },
-  { label: 'OCR处理中', value: 1 }
+  { label: '报告总数', value: statistics.value?.reportCount ?? 0 },
+  { label: 'OCR记录', value: statistics.value?.ocrCount ?? 0 }
 ]);
 
 async function loadData() {
@@ -24,10 +26,18 @@ async function loadData() {
   error.value = '';
   try {
     if (!projectStore.currentProject) await projectStore.fetchProjects();
-    const page = await fetchReports({ projectId: projectStore.currentProject?.projectId, pageNo: 1, pageSize: 5 });
+    const projectId = projectStore.currentProject?.projectId;
+    if (!projectId) throw new Error('请先选择项目');
+    const [projectStatistics, page] = await Promise.all([
+      fetchProjectStatistics(projectId),
+      fetchReports({ projectId, pageNo: 1, pageSize: 5 })
+    ]);
+    statistics.value = projectStatistics;
     reports.value = page.records;
   } catch (err) {
     error.value = err instanceof Error ? err.message : '首页数据加载失败';
+    statistics.value = null;
+    reports.value = [];
   } finally {
     loading.value = false;
   }

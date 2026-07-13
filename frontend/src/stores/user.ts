@@ -4,25 +4,36 @@ import type { UserInfo } from '../api/types';
 
 const tokenKey = 'smart_worksite_token';
 const userKey = 'smart_worksite_user';
+const projectKey = 'smart_worksite_project';
 
 const permissionAliases: Record<string, string[]> = {
   'file:view': ['file:manage'],
   'template:view': ['file:manage'],
-  'audit:view': ['system:manage']
+  'audit:view': ['system:manage'],
+  'datasource:view': ['datasource:manage']
 };
 
 function readStoredUser() {
   const raw = localStorage.getItem(userKey);
   if (!raw) return null;
-  try { return JSON.parse(raw) as UserInfo; } catch { return null; }
+  try {
+    return JSON.parse(raw) as UserInfo;
+  } catch (error) {
+    console.error('Stored user state is corrupted; clearing local auth state.', error);
+    localStorage.removeItem(userKey);
+    localStorage.removeItem(tokenKey);
+    return null;
+  }
 }
+
+const storedUser = readStoredUser();
 
 export const useUserStore = defineStore('user', {
   state: () => ({
     token: localStorage.getItem(tokenKey) || '',
-    user: readStoredUser() as UserInfo | null,
-    permissions: readStoredUser()?.permissions || [] as string[],
-    roles: readStoredUser()?.roles || [] as string[],
+    user: storedUser as UserInfo | null,
+    permissions: storedUser?.permissions || [] as string[],
+    roles: storedUser?.roles || [] as string[],
     loading: false,
     error: ''
   }),
@@ -35,8 +46,12 @@ export const useUserStore = defineStore('user', {
       this.user = user;
       this.permissions = user?.permissions || [];
       this.roles = user?.roles || [];
-      if (user) localStorage.setItem(userKey, JSON.stringify(user));
-      else localStorage.removeItem(userKey);
+      if (user) {
+        localStorage.setItem(userKey, JSON.stringify(user));
+        if (user.defaultProjectId) localStorage.setItem(projectKey, String(user.defaultProjectId));
+      } else {
+        localStorage.removeItem(userKey);
+      }
     },
     setToken(token: string) {
       this.token = token;
@@ -72,7 +87,9 @@ export const useUserStore = defineStore('user', {
       }
     },
     async logout() {
-      try { await authApi.logout(); } catch { /* ignore logout api failure */ }
+      await authApi.logout().catch((error) => {
+        console.warn('Logout API failed, clearing local auth state anyway.', error);
+      });
       this.clearAuthState();
     },
     clearAuthState() {
@@ -84,6 +101,7 @@ export const useUserStore = defineStore('user', {
     },
     hasPermission(permission?: string) {
       if (!permission) return true;
+      if (this.roles.includes('PLATFORM_ADMIN')) return true;
       if (this.permissions.includes(permission)) return true;
       return (permissionAliases[permission] || []).some((alias) => this.permissions.includes(alias));
     }

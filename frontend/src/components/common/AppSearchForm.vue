@@ -3,8 +3,7 @@ type SearchField = { prop: string; label: string; type?: 'input' | 'select' | 'd
 const props = defineProps<{ modelValue: Record<string, unknown>; fields: SearchField[] }>();
 const emit = defineEmits<{ 'update:modelValue': [value: Record<string, unknown>]; search: []; reset: [] }>();
 function patch(prop: string, value: unknown) {
-  props.modelValue[prop] = value;
-  emit('update:modelValue', props.modelValue);
+  emit('update:modelValue', { ...props.modelValue, [prop]: value });
 }
 </script>
 

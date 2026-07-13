@@ -36,11 +36,6 @@ function cleanParams(params: TemplateQuery) {
   return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== '' && value !== undefined && value !== null));
 }
 
-function mergeLocalTemplates(page: PageResult<TemplateItem>, params: TemplateQuery) {
-  const local: TemplateItem[] = [];
-  return { ...page, total: page.total + local.length, records: [...local, ...page.records] };
-}
-
 export async function uploadTemplate(data: TemplateUploadRequest) {
   const form = new FormData();
   form.append('projectId', String(data.projectId));
@@ -57,12 +52,7 @@ export async function uploadTemplate(data: TemplateUploadRequest) {
 }
 
 export async function fetchTemplates(params: TemplateQuery = {}) {
-  const page = await request.get<PageResult<TemplateItem>>('/templates', { params: cleanParams(params) });
-  return mergeLocalTemplates(page, params);
-}
-
-export function fetchLocalTemplates(_params: TemplateQuery = {}) {
-  return [] as TemplateItem[];
+  return request.get<PageResult<TemplateItem>>('/templates', { params: cleanParams(params) });
 }
 
 export function fetchTemplateDetail(templateId: ID) {

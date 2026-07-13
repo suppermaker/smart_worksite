@@ -79,6 +79,18 @@ export interface ProjectUpdateForm {
   location?: string;
   description?: string;
 }
+
+export interface ProjectStatistics {
+  projectId: ID;
+  memberCount: number;
+  knowledgeBaseCount: number;
+  reportCount: number;
+  dataSourceCount: number;
+  qaCount: number;
+  reviewCount: number;
+  ocrCount: number;
+  fileStorageBytes: number;
+}
 export interface FileObject {
   fileId: ID;
   objectName?: string;
@@ -86,9 +98,6 @@ export interface FileObject {
   bizType?: string;
   bizId?: ID;
   fileName: string;
-  originalName?: string;
-  fileType?: string;
-  size?: number;
   fileExt?: string;
   contentType?: string;
   fileSize: number;
@@ -187,6 +196,8 @@ export interface ReviewIssue {
   ruleName: string;
   description: string;
   suggestion: string;
+  status?: 'OPEN' | 'PROCESSING' | 'RESOLVED' | 'IGNORED' | string;
+  comment?: string;
 }
 
 export interface ReviewRecord {
@@ -296,10 +307,14 @@ export interface ProjectMemberItem {
 }
 
 export interface OcrField {
+  fieldKey?: string;
   fieldName: string;
   fieldValue: string;
   confidence: number;
   location: string;
+  pageNo?: number;
+  evidence?: string;
+  revised?: boolean;
 }
 
 export interface OcrRecord {
@@ -308,7 +323,7 @@ export interface OcrRecord {
   projectId: ID;
   taskId: ID;
   fileId: ID;
-  ocrType: 'ID_CARD' | 'LICENSE_PLATE' | 'INVOICE' | 'CONTRACT' | 'CUSTOM';
+  ocrType: 'ID_CARD' | 'LICENSE_PLATE' | 'INVOICE' | 'CUSTOM';
   status: Status;
   progress: number;
   fields: OcrField[];
@@ -369,15 +384,54 @@ export interface DataSourceItem {
   dataSourceId: ID;
   projectId: ID;
   name: string;
-  type: 'MYSQL' | 'POSTGRESQL' | 'KINGBASE' | string;
-  host: string;
-  port?: number;
-  databaseName: string;
+  dbType: 'MYSQL' | 'POSTGRESQL' | 'KINGBASE' | string;
+  jdbcUrl: string;
   username?: string;
   status: Status | string;
-  description?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DataSourceForm {
+  projectId?: ID;
+  name: string;
+  dbType: string;
+  jdbcUrl: string;
+  username: string;
+  password?: string;
+}
+
+export interface DataSourceConnectionTestResult {
+  dataSourceId: ID;
+  success: boolean;
+  message: string;
+}
+
+export interface DataSourceSchema {
+  dataSourceId: ID;
+  dbType: string;
+  catalog?: string;
+  schema?: string;
+  tables: Array<{
+    tableName: string;
+    tableType?: string;
+    remarks?: string;
+    columns: Array<{ columnName: string; typeName: string; columnSize?: number; decimalDigits?: number; nullable?: boolean; remarks?: string }>;
+  }>;
+}
+
+export interface TaskStatistics {
+  projectId?: ID;
+  statusCounts: Record<string, number>;
+  queuedCount: number;
+  runningCount: number;
+  failedCount: number;
+}
+
+export interface OcrTypeTemplate {
+  ocrType: string;
+  name: string;
+  requiredFields: string[];
 }
 
 export interface DataSourceQueryResult {
@@ -391,12 +445,16 @@ export interface AuditLog {
   id: ID;
   projectId?: ID;
   operatorId?: ID;
-  operatorName: string;
+  operatorName?: string;
   action: string;
-  module: string;
+  module?: string;
+  objectType?: string;
+  objectId?: ID;
   targetType?: string;
   targetId?: ID;
-  result: 'SUCCESS' | 'FAILED' | string;
+  requestId?: string;
+  result?: 'SUCCESS' | 'FAILED' | string;
+  ipAddress?: string;
   ip?: string;
   detail?: string;
   createdAt: string;

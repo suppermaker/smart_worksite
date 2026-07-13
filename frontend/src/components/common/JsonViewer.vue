@@ -3,8 +3,31 @@ import { computed } from 'vue';
 import { ElMessage } from 'element-plus';
 const props = defineProps<{ value: unknown; title?: string }>();
 const jsonText = computed(() => JSON.stringify(props.value, null, 2));
-async function copy() { await navigator.clipboard.writeText(jsonText.value); ElMessage.success('JSON已复制'); }
-function download() { const blob = new Blob([jsonText.value], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'result.json'; a.click(); URL.revokeObjectURL(a.href); }
+async function copy() {
+  try {
+    await navigator.clipboard.writeText(jsonText.value);
+    ElMessage.success('JSON已复制');
+  } catch (error) {
+    const detail = error instanceof Error && error.message ? `：${error.message}` : '';
+    ElMessage.error(`JSON复制失败${detail}`);
+  }
+}
+function download() {
+  try {
+    const blob = new Blob([jsonText.value], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'result.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    const detail = error instanceof Error && error.message ? `：${error.message}` : '';
+    ElMessage.error(`JSON下载失败${detail}`);
+  }
+}
 </script>
 
 <template>

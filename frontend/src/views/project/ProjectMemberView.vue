@@ -7,12 +7,14 @@ import type { ProjectMemberItem, UserItem } from '../../api/types';
 import { useProjectStore } from '../../stores/project';
 
 const projectStore = useProjectStore();
-const projectId = ref<string | number>(projectStore.currentProjectId || '');
+const projectId = computed(() => projectStore.currentProjectId || '');
 const members = ref<ProjectMemberItem[]>([]);
 const allUsers = ref<UserItem[]>([]);
 const loading = ref(false);
 const userLoading = ref(false);
 const submitting = ref(false);
+const memberError = ref('');
+const userError = ref('');
 
 const dialogVisible = ref(false);
 const editingUserId = ref<number | string | null>(null);
@@ -27,22 +29,41 @@ const PROJECT_ROLES = [
 const roleLabel = (role: string) => PROJECT_ROLES.find((item) => item.value === role)?.label || role;
 const existingUserIds = computed(() => new Set(members.value.map((member) => String(member.userId))));
 const availableUsers = computed(() => allUsers.value.filter((user) => user.status === 'ENABLED' && !existingUserIds.value.has(String(user.id))));
+const currentProjectName = computed(() => projectStore.currentProject?.name || projectStore.currentProject?.projectName || '');
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 async function fetchMembers() {
-  if (!projectId.value) return;
+  memberError.value = '';
+  if (!projectId.value) {
+    members.value = [];
+    memberError.value = '请先选择项目';
+    return;
+  }
   loading.value = true;
   try {
     members.value = await memberApi.listMembers(projectId.value);
+  } catch (error) {
+    members.value = [];
+    memberError.value = getErrorMessage(error, '项目成员加载失败');
+    ElMessage.error(memberError.value);
   } finally {
     loading.value = false;
   }
 }
 
 async function fetchUsers() {
+  userError.value = '';
   userLoading.value = true;
   try {
     const res = await userApi.listUsers({ pageNo: 1, pageSize: 100, status: 'ENABLED' });
     allUsers.value = res.records;
+  } catch (error) {
+    allUsers.value = [];
+    userError.value = getErrorMessage(error, '可选用户加载失败');
+    ElMessage.error(userError.value);
   } finally {
     userLoading.value = false;
   }
@@ -85,27 +106,47 @@ async function submit() {
     }
     dialogVisible.value = false;
     await fetchMembers();
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, editingUserId.value == null ? '成员添加失败' : '角色更新失败'));
   } finally {
     submitting.value = false;
   }
 }
 
 async function remove(row: ProjectMemberItem) {
-  await ElMessageBox.confirm(`确认移除成员“${row.displayName || row.username}”？`, '提示', { type: 'warning' });
-  await memberApi.removeMember(projectId.value, row.userId);
-  ElMessage.success('已移除');
-  await fetchMembers();
+  if (!projectId.value) {
+    ElMessage.error('请先选择项目');
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(`确认移除成员“${row.displayName || row.username}”？`, '提示', { type: 'warning' });
+    await memberApi.removeMember(projectId.value, row.userId);
+    ElMessage.success('已移除');
+    await fetchMembers();
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getErrorMessage(error, '移除成员失败'));
+    }
+  }
 }
 </script>
 
 <template>
   <div>
     <div class="page-header">
-      <h2>项目成员管理</h2>
-      <el-button type="primary" @click="openAdd">添加成员</el-button>
+      <div>
+        <h2>项目成员管理</h2>
+        <p>{{ currentProjectName || '未选择项目' }}</p>
+      </div>
+      <el-button type="primary" :disabled="!projectId" @click="openAdd">添加成员</el-button>
     </div>
 
+    <el-alert v-if="memberError" :title="memberError" type="error" show-icon :closable="false" class="page-alert" />
+
     <el-table :data="members" v-loading="loading" stripe>
+      <template #empty>
+        <el-empty :description="projectId ? '暂无项目成员' : '请先选择项目'" />
+      </template>
       <el-table-column prop="username" label="用户名" width="140" />
       <el-table-column prop="displayName" label="显示名称" width="160" />
       <el-table-column label="项目角色" width="140">
@@ -139,6 +180,7 @@ async function remove(row: ProjectMemberItem) {
           <el-select v-model="form.userId" filterable :loading="userLoading" style="width: 100%" placeholder="请选择用户">
             <el-option v-for="user in availableUsers" :key="user.id" :label="`${user.displayName} (${user.username})`" :value="user.id" />
           </el-select>
+          <div v-if="userError" class="form-error">{{ userError }}</div>
         </el-form-item>
         <el-form-item label="项目角色">
           <el-select v-model="form.projectRole" style="width: 100%">
@@ -165,5 +207,22 @@ async function remove(row: ProjectMemberItem) {
 .page-header h2 {
   margin: 0;
   font-size: 18px;
+}
+
+.page-header p {
+  margin: 6px 0 0;
+  color: var(--sw-muted);
+  font-size: 13px;
+}
+
+.page-alert {
+  margin-bottom: 12px;
+}
+
+.form-error {
+  width: 100%;
+  margin-top: 6px;
+  color: var(--el-color-danger);
+  font-size: 12px;
 }
 </style>

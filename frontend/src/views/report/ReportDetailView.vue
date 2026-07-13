@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import JsonViewer from '../../components/common/JsonViewer.vue';
 import StatusTag from '../../components/common/StatusTag.vue';
 import TaskProgress from '../../components/common/TaskProgress.vue';
@@ -10,6 +10,7 @@ import { fetchTaskStages } from '../../api/task';
 import type { ReportItem, TaskStageLog } from '../../api/types';
 
 const route = useRoute();
+const router = useRouter();
 const loading = ref(false);
 const downloading = ref(false);
 const regenerating = ref(false);
@@ -80,7 +81,12 @@ async function handleRegenerate() {
   regenerating.value = true;
   error.value = '';
   try {
-    await regenerateReport(report.value.reportId);
+    const result = await regenerateReport(report.value.reportId);
+    if (result.reportId && String(result.reportId) !== String(report.value.reportId)) {
+      await router.replace(`/report/${result.reportId}`);
+      await loadData();
+      return;
+    }
     await loadData();
   } catch (err) {
     error.value = err instanceof Error ? err.message : '重新生成失败';
@@ -112,7 +118,6 @@ onMounted(loadData);
         <el-space>
           <el-button type="primary" plain :loading="downloading" :disabled="!canDownloadReport(report)" @click="handleDownload">下载报告</el-button>
           <el-button :loading="regenerating" :disabled="!canRegenerateReport(report)" @click="handleRegenerate">重新生成</el-button>
-          <el-button disabled title="后端接口待提供">版本列表</el-button>
         </el-space>
       </div>
 
@@ -129,7 +134,6 @@ onMounted(loadData);
         <el-card class="work-card">
           <h3 class="panel-title">报告预览</h3>
           <p>报告生成成功后可下载 Word 文件查看。</p>
-          <p class="muted">在线预览接口待后端提供。</p>
         </el-card>
         <el-card class="work-card">
           <h3 class="panel-title">生成进度</h3>

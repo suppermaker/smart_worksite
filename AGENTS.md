@@ -37,6 +37,7 @@ Frontend application:
 - Axios
 - Element Plus
 - `@element-plus/icons-vue`
+- `unplugin-auto-import` and `unplugin-vue-components` for Element Plus on-demand imports
 - npm
 
 Python intelligent algorithm service:
@@ -210,7 +211,9 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - Use `npm` for frontend package management.
 - Frontend source files containing Chinese text must be saved as UTF-8 and must not contain mojibake or `????` placeholders.
 - API base URL must be read from `.env` as `VITE_API_BASE_URL`.
-- Development may use mock data when the backend API is not available.
+- Development may use mock data when the backend API is not available, but mock mode must be explicitly enabled through environment variables and must not be the default for real integration.
+- Frontend API failures must remain visible to users; do not return fake success, fake empty lists, or mock fallback data after a real backend call fails.
+- Project management must have a single primary frontend entry; avoid duplicate pages that implement the same project CRUD flow.
 - All HTTP calls must go through `frontend/src/utils/request.ts`.
 - Requests should automatically attach `Authorization` when a token exists.
 - Requests should automatically attach `X-Request-Id`.
@@ -222,7 +225,14 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - Every page must handle loading, empty, and error states.
 - Long-running tasks such as report generation, OCR recognition, and knowledge indexing must show status, progress, or stage logs.
 - Frontend action buttons for state-machine APIs must follow backend allowed transitions: disable retry/cancel/download/content/regenerate actions when the current row status cannot accept that operation, while leaving backend fail-fast conflicts intact for stale clients.
-- Knowledge document indexing actions must be state-aware: allow submit/retry only for `PENDING` and `FAILED`, and disable repeat submission for `INDEXING` or `SUCCESS`.
+- Knowledge document indexing actions must be state-aware: allow submit/retry only for `PENDING` and `FAILED`, disable repeat submission for `INDEXING` or `SUCCESS`, and require a successful file parse result before triggering indexing.
+- OCR invoice submission must expose and send `invoiceType` as `VAT_SPECIAL` or `VAT_NORMAL`; do not let invoice recognition submit without this backend-required option.
+- Report and review creation pages must load only enabled templates. Review issue status updates must use backend enum values `OPEN`, `PROCESSING`, `RESOLVED`, and `IGNORED`.
+- Template upload UI should restrict report/review template files to formats the backend can parse for variables or review context; do not present unsupported template formats as normal upload options.
+- Single-file business flows such as template upload, review submit, and OCR submit must render upload controls as single-file controls; do not allow multi-select and then silently submit only the first file.
+- Report and review creation pages must load only enabled templates. Review issue status updates must use backend enum values `OPEN`, `PROCESSING`, `RESOLVED`, and `IGNORED`.
+- Template upload UI should restrict report/review template files to formats the backend can parse for variables or review context; do not present unsupported template formats as normal upload options.
+- Single-file business flows such as template upload, review submit, and OCR submit must render upload controls as single-file controls; do not allow multi-select and then silently submit only the first file.
 - AI results should expose traceable information where available, such as sources, confidence, raw JSON, or document references.
 - Frontend report-template upload APIs must pass explicit `templateName` and `templateType`; do not derive them from the filename or rely on backend fallback metadata.
 

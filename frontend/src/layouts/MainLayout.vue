@@ -1,8 +1,8 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
-import { ChatLineRound, DocumentChecked, Files, Folder, FolderOpened, House, Notebook, Picture, Setting, SwitchButton, Tickets, User, UserFilled } from '@element-plus/icons-vue';
+import { ChatLineRound, Coin, DocumentChecked, Files, FolderOpened, House, Notebook, Operation, Picture, Setting, SwitchButton, Tickets, User, UserFilled } from '@element-plus/icons-vue';
 import { useProjectStore } from '../stores/project';
 import { useUserStore } from '../stores/user';
 
@@ -21,8 +21,9 @@ const menus = [
   { path: '/review', title: '合规审查', icon: DocumentChecked, permission: 'review:view' },
   { path: '/report', title: '报告管理', icon: Files, permission: 'report:view' },
   { path: '/ocr', title: 'OCR识别', icon: Picture, permission: 'ocr:view' },
-  { path: '/audit', title: '审计日志', icon: Setting, permission: 'audit:view' },
-  { path: '/project/manage', title: '项目设置', icon: Folder, permission: 'project:manage' },
+  { path: '/datasources', title: '数据源管理', icon: Coin },
+  { path: '/tasks', title: '任务中心', icon: Operation },
+  { path: '/audit', title: '审计日志', icon: Setting },
   { path: '/project/members', title: '项目成员', icon: UserFilled, permission: 'project:member:manage' },
   { path: '/system/users', title: '用户管理', icon: User, permission: 'system:user:manage' },
   { path: '/system/roles', title: '角色管理', icon: Setting, permission: 'system:user:manage' }

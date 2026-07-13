@@ -1,4 +1,4 @@
-import type { RouteRecordRaw } from 'vue-router';
+﻿import type { RouteRecordRaw } from 'vue-router';
 import { createRouter, createWebHistory } from 'vue-router';
 import MainLayout from '../layouts/MainLayout.vue';
 import { useUserStore } from '../stores/user';
@@ -17,8 +17,10 @@ export const routes: RouteRecordRaw[] = [
     { path: 'report', name: 'report', component: () => import('../views/report/ReportListView.vue'), meta: { title: '报告管理', permission: 'report:view' } },
     { path: 'report/:id', name: 'reportDetail', component: () => import('../views/report/ReportDetailView.vue'), meta: { title: '报告详情', permission: 'report:view' } },
     { path: 'ocr', name: 'ocr', component: () => import('../views/ocr/OcrView.vue'), meta: { title: 'OCR识别', permission: 'ocr:view' } },
-    { path: 'audit', name: 'audit', component: () => import('../views/audit/AuditLogView.vue'), meta: { title: '审计日志', permission: 'audit:view' } },
-    { path: 'project/manage', name: 'projectManage', component: () => import('../views/project/ProjectManageView.vue'), meta: { title: '项目设置', permission: 'project:manage' } },
+    { path: 'datasources', name: 'datasources', component: () => import('../views/datasource/DataSourceView.vue'), meta: { title: '数据源管理' } },
+    { path: 'tasks', name: 'tasks', component: () => import('../views/task/TaskCenterView.vue'), meta: { title: '任务中心' } },
+    { path: 'audit', name: 'audit', component: () => import('../views/audit/AuditLogView.vue'), meta: { title: '审计日志' } },
+    { path: 'project/manage', redirect: '/projects' },
     { path: 'project/members', name: 'projectMembers', component: () => import('../views/project/ProjectMemberView.vue'), meta: { title: '项目成员', permission: 'project:member:manage' } },
     { path: 'system/users', name: 'systemUsers', component: () => import('../views/system/UserManageView.vue'), meta: { title: '用户管理', permission: 'system:user:manage' } },
     { path: 'system/roles', name: 'systemRoles', component: () => import('../views/system/RoleManageView.vue'), meta: { title: '角色管理', permission: 'system:user:manage' } },
@@ -32,9 +34,16 @@ export const router = createRouter({
   routes
 });
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const userStore = useUserStore();
   if (!to.meta.public && !userStore.isLoggedIn) return { path: '/login', query: { redirect: to.fullPath } };
+  if (!to.meta.public && userStore.isLoggedIn && !userStore.user) {
+    try {
+      await userStore.fetchCurrentUser();
+    } catch {
+      return { path: '/login', query: { redirect: to.fullPath } };
+    }
+  }
   if (!userStore.hasPermission(to.meta.permission as string | undefined)) return '/403';
   return true;
 });

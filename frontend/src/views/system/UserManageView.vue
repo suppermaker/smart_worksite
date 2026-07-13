@@ -6,9 +6,13 @@ import * as roleApi from '../../api/role';
 import type { UserItem, RoleItem } from '../../api/types';
 
 const loading = ref(false);
+const roleLoading = ref(false);
 const total = ref(0);
 const users = ref<UserItem[]>([]);
 const roles = ref<RoleItem[]>([]);
+const error = ref('');
+const roleError = ref('');
+const submitting = ref(false);
 const query = reactive({ keyword: '', status: '', pageNo: 1, pageSize: 20 });
 
 const dialogVisible = ref(false);
@@ -23,17 +27,37 @@ const resetPwdVisible = ref(false);
 const resetPwdUserId = ref<number | string | null>(null);
 const newPassword = ref('');
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 async function fetchUsers() {
   loading.value = true;
+  error.value = '';
   try {
     const res = await userApi.listUsers(query);
     users.value = res.records;
     total.value = res.total;
-  } catch { /* handled by interceptor */ } finally { loading.value = false; }
+  } catch (err) {
+    users.value = [];
+    total.value = 0;
+    error.value = getErrorMessage(err, '用户列表加载失败');
+    ElMessage.error(error.value);
+  } finally { loading.value = false; }
 }
 
 async function fetchRoles() {
-  try { roles.value = await roleApi.listRoles(); } catch { /* ignored */ }
+  roleLoading.value = true;
+  roleError.value = '';
+  try {
+    roles.value = await roleApi.listRoles();
+  } catch (error) {
+    roles.value = [];
+    roleError.value = getErrorMessage(error, '角色列表加载失败');
+    ElMessage.error(roleError.value);
+  } finally {
+    roleLoading.value = false;
+  }
 }
 
 onMounted(() => { fetchUsers(); fetchRoles(); });
@@ -54,6 +78,7 @@ function openEdit(row: UserItem) {
 
 async function submitForm() {
   await formRef.value?.validate();
+  submitting.value = true;
   try {
     if (editingUserId.value == null) {
       await userApi.createUser({ username: form.username, password: form.password, displayName: form.displayName, phone: form.phone || undefined, email: form.email || undefined, roleCodes: form.roleCodes });
@@ -64,7 +89,11 @@ async function submitForm() {
     }
     dialogVisible.value = false;
     fetchUsers();
-  } catch { /* handled */ }
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, editingUserId.value == null ? '创建用户失败' : '更新用户失败'));
+  } finally {
+    submitting.value = false;
+  }
 }
 
 async function toggleStatus(row: UserItem) {
@@ -75,7 +104,9 @@ async function toggleStatus(row: UserItem) {
     await userApi.updateUserStatus(row.id, next);
     ElMessage.success(`${label}成功`);
     fetchUsers();
-  } catch { /* handled */ }
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, `${label}用户失败`));
+  }
 }
 
 function openResetPwd(row: UserItem) {
@@ -92,7 +123,9 @@ async function submitResetPwd() {
     await userApi.resetPassword(resetPwdUserId.value!, newPassword.value);
     ElMessage.success('密码重置成功');
     resetPwdVisible.value = false;
-  } catch { /* handled */ }
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '密码重置失败'));
+  }
 }
 
 const formRules = {
@@ -122,7 +155,10 @@ const roleMap: Record<string, string> = {
       <el-button type="primary" @click="fetchUsers">查询</el-button>
     </div>
 
+    <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="page-alert" />
+
     <el-table :data="users" v-loading="loading" stripe>
+      <template #empty><el-empty description="暂无用户数据" /></template>
       <el-table-column prop="username" label="用户名" width="140" />
       <el-table-column prop="displayName" label="显示名称" width="140" />
       <el-table-column label="角色" min-width="180">
@@ -172,14 +208,15 @@ const roleMap: Record<string, string> = {
           <el-input v-model="form.email" />
         </el-form-item>
         <el-form-item label="角色">
-          <el-select v-model="form.roleCodes" multiple style="width:100%">
+          <el-select v-model="form.roleCodes" multiple :loading="roleLoading" style="width:100%">
             <el-option v-for="r in roles" :key="r.roleCode" :label="roleMap[r.roleCode] || r.roleName" :value="r.roleCode" />
           </el-select>
+          <div v-if="roleError" class="form-error">{{ roleError }}</div>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitForm">确定</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">确定</el-button>
       </template>
     </el-dialog>
 
@@ -202,4 +239,6 @@ const roleMap: Record<string, string> = {
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .page-header h2 { margin: 0; font-size: 18px; }
 .search-bar { display: flex; gap: 10px; margin-bottom: 16px; }
+.page-alert { margin-bottom: 12px; }
+.form-error { width: 100%; margin-top: 6px; color: var(--el-color-danger); font-size: 12px; }
 </style>

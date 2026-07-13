@@ -9,7 +9,7 @@ export function addMember(projectId: number | string, data: { userId: number | s
   return request.post<ProjectMemberItem>(`/projects/${projectId}/members`, data);
 }
 
-export function updateMember(projectId: number | string, userId: number | string, data: { userId: number | string; projectRole: string }) {
+export function updateMember(projectId: number | string, userId: number | string, data: { userId?: number | string; projectRole: string }) {
   return request.put<ProjectMemberItem>(`/projects/${projectId}/members/${userId}`, data);
 }
 

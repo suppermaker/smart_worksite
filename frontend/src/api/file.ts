@@ -1,4 +1,4 @@
-import request, { downloadFile } from '../utils/request';
+import request, { downloadFile, downloadTextFile } from '../utils/request';
 import { mockFiles } from '../mocks/file';
 import type { FileAccessUrl, FileObject, ID, PageQuery, PageResult } from './types';
 import { useModuleMock } from './mock';
@@ -38,8 +38,12 @@ function cleanParams(params: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== '' && value !== undefined && value !== null));
 }
 
-export async function uploadFile(projectId: ID, file: File, businessType = 'KNOWLEDGE_DOC') {
-  if (useMock) return { ...mockFiles[0], projectId, fileName: file.name } satisfies FileObject;
+export async function uploadFile(projectId: ID, file: File, businessType: string) {
+  if (useMock) {
+    const seed = mockFiles[0];
+    if (!seed) throw new Error('文件 mock 种子数据缺失');
+    return { ...seed, projectId, fileName: file.name, bizType: businessType } satisfies FileObject;
+  }
   const form = new FormData();
   form.append('projectId', String(projectId));
   form.append('bizType', businessType);
@@ -54,7 +58,11 @@ export async function fetchFiles(params: PageQuery & { bizType?: string; bizId?:
 }
 
 export async function fetchFileDetail(fileId: ID) {
-  if (useMock) return mockFiles.find((item) => String(item.fileId) === String(fileId)) || mockFiles[0];
+  if (useMock) {
+    const item = mockFiles.find((file) => String(file.fileId) === String(fileId));
+    if (!item) throw new Error(`文件不存在：${fileId}`);
+    return item;
+  }
   return request.get<FileObject>(`/files/${fileId}`);
 }
 
@@ -72,7 +80,7 @@ export async function deleteFile(fileId: ID) {
 }
 
 export async function downloadByFileId(fileId: ID, filename?: string) {
-  if (useMock) return downloadFile('', { filename, data: 'mock file content' });
+  if (useMock) return downloadTextFile(filename || `file-${fileId}.txt`, 'mock file content');
   const access = await fetchFileDownloadUrl(fileId);
   if (!access.url) throw new Error('文件下载地址为空，请检查后端文件访问 URL 接口。');
   return downloadFile(access.url, { filename });

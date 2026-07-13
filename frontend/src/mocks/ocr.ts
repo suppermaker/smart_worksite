@@ -6,7 +6,7 @@ export const mockOcrRecord: OcrRecord = {
   projectId: 1001,
   taskId: 9601,
   fileId: 4401,
-  ocrType: 'CONTRACT',
+  ocrType: 'CUSTOM',
   status: 'PROCESSING',
   progress: 88,
   fields: [

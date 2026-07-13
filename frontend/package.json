@@ -19,6 +19,8 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "latest",
     "typescript": "latest",
+    "unplugin-auto-import": "^21.0.0",
+    "unplugin-vue-components": "^32.1.0",
     "vite": "latest",
     "vue-tsc": "latest"
   }

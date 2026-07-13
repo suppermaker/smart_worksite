@@ -1,5 +1,4 @@
 ﻿import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios';
-import { ElMessage } from 'element-plus';
 import { router } from '../router';
 import { useUserStore } from '../stores/user';
 import { createRequestId } from './id';
@@ -17,6 +16,20 @@ export interface DownloadOptions extends AxiosRequestConfig {
 }
 
 let authRedirecting = false;
+
+export class RequestError extends Error {
+  status?: number;
+  code?: number;
+  requestId?: string;
+
+  constructor(message: string, options: { status?: number; code?: number; requestId?: string } = {}) {
+    super(message);
+    this.name = 'RequestError';
+    this.status = options.status;
+    this.code = options.code;
+    this.requestId = options.requestId;
+  }
+}
 
 type RequestInstance = Omit<AxiosInstance, 'get' | 'post' | 'put' | 'delete' | 'request'> & {
   request<T = unknown, R = T>(config: AxiosRequestConfig): Promise<R>;
@@ -49,12 +62,16 @@ function parseFilename(contentDisposition?: string, fallback = 'download') {
   return normalMatch?.[1] ? decodeURIComponent(normalMatch[1]) : fallback;
 }
 
+function formatApiMessage(message: string, requestId?: string) {
+  return requestId ? `${message}（RequestId: ${requestId}）` : message;
+}
+
 async function parseBlobJson(blob: Blob) {
   const text = await blob.text();
   try {
     return JSON.parse(text) as ApiResponse;
-  } catch {
-    return null;
+  } catch (error) {
+    throw new Error(`响应声明为 JSON 但解析失败：${text.slice(0, 200) || (error instanceof Error ? error.message : '空响应')}`);
   }
 }
 
@@ -82,10 +99,10 @@ request.interceptors.response.use(
       if (String(contentType).includes('application/json')) {
         const apiError = await parseBlobJson(response.data);
         if (apiError && apiError.code !== 0) {
+          const message = formatApiMessage(apiError.message || '下载失败', apiError.requestId);
           if (apiError.code === 40100) await handleUnauthorized();
           else if (apiError.code === 40300) await router.replace('/403');
-          else ElMessage.error(apiError.message || '下载失败');
-          return Promise.reject(new Error(apiError.message || '下载失败'));
+          return Promise.reject(new RequestError(message, { code: apiError.code, requestId: apiError.requestId }));
         }
       }
       return response as unknown as T;
@@ -96,46 +113,48 @@ request.interceptors.response.use(
       if (body.code === 0) return (body.data ?? null) as T;
       if (body.code === 40100) {
         await handleUnauthorized();
-        return Promise.reject(new Error(body.message || '未登录或登录已过期'));
+        const message = formatApiMessage(body.message || '未登录或登录已过期', body.requestId);
+        return Promise.reject(new RequestError(message, { code: body.code, requestId: body.requestId }));
       }
       if (body.code === 40300) {
         await router.replace('/403');
-        return Promise.reject(new Error(body.message || '无权限访问'));
+        const message = formatApiMessage(body.message || '无权限访问', body.requestId);
+        return Promise.reject(new RequestError(message, { code: body.code, requestId: body.requestId }));
       }
-      ElMessage.error(body.message || '请求失败');
-      return Promise.reject(new Error(body.message || '请求失败'));
+      const message = formatApiMessage(body.message || '请求失败', body.requestId);
+      return Promise.reject(new RequestError(message, { code: body.code, requestId: body.requestId }));
     }
     return body as T;
   },
   async (error: AxiosError<ApiResponse | Blob>) => {
     const status = error.response?.status;
     let message = '网络异常';
+    let code: number | undefined;
+    let requestId: string | undefined;
     if (error.response?.data instanceof Blob) {
-      const apiError = await parseBlobJson(error.response.data);
-      message = apiError?.message || error.message || message;
+      try {
+        const apiError = await parseBlobJson(error.response.data);
+        message = apiError.message || error.message || message;
+        code = apiError.code;
+        requestId = apiError.requestId;
+      } catch (parseError) {
+        message = parseError instanceof Error ? parseError.message : error.message || message;
+      }
     } else {
       message = error.response?.data?.message || error.message || message;
+      code = error.response?.data?.code;
+      requestId = error.response?.data?.requestId || getHeader(error.response?.headers || {}, 'x-request-id');
     }
+    message = formatApiMessage(message, requestId);
     if (status === 401) await handleUnauthorized();
     else if (status === 403) await router.replace('/403');
-    else ElMessage.error(message);
-    return Promise.reject(error);
+    return Promise.reject(new RequestError(message, { status, code, requestId }));
   }
 );
 
 export async function downloadFile(url: string, options: DownloadOptions = {}) {
-  if (options.data && !url) {
-    const blob = new Blob([String(options.data)], { type: 'text/plain;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = options.filename || 'download.txt';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
-    return;
-  }
-    const response = await request.request<Blob, AxiosResponse<Blob>>({
+  if (!url) throw new Error('下载地址为空');
+  const response = await request.request<Blob, AxiosResponse<Blob>>({
     ...options,
     url,
     method: options.method || 'GET',
@@ -145,13 +164,32 @@ export async function downloadFile(url: string, options: DownloadOptions = {}) {
   const blob = response.data;
   const headerFilename = parseFilename(getHeader(response.headers, 'content-disposition'), options.filename || 'download');
   const filename = options.filename || headerFilename;
+  const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(link.href);
+  try {
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+  } finally {
+    if (link.parentNode) document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+export function downloadTextFile(filename: string, data: string) {
+  const blob = new Blob([data], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  try {
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+  } finally {
+    if (link.parentNode) document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
 }
 
 export default request;

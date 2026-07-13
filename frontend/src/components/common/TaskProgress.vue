@@ -4,8 +4,13 @@ import type { TaskStageLog } from '../../api/types';
 
 const props = defineProps<{ percentage: number; status?: string; logs?: Array<string | TaskStageLog> }>();
 const timeline = computed(() => (props.logs || []).map((log) => typeof log === 'string'
-  ? { message: log, stageName: log, createdAt: '' }
-  : { message: log.errorMessage || log.outputSummary || log.inputSummary || '', stageName: log.stageCode, createdAt: log.createdAt }));
+  ? { message: log, stageName: log, status: '', createdAt: '' }
+  : {
+      message: log.errorMessage || log.message || log.outputSummary || log.inputSummary || '',
+      stageName: log.stageName || log.stageCode,
+      status: log.status,
+      createdAt: log.createdAt || log.finishedAt || log.startedAt || ''
+    }));
 </script>
 
 <template>
@@ -14,6 +19,7 @@ const timeline = computed(() => (props.logs || []).map((log) => typeof log === '
     <el-timeline v-if="timeline.length" style="margin-top: 12px">
       <el-timeline-item v-for="log in timeline" :key="`${log.stageName}-${log.createdAt}`" :timestamp="log.createdAt">
         <strong>{{ log.stageName }}</strong>
+        <el-tag v-if="log.status" size="small" style="margin-left: 8px">{{ log.status }}</el-tag>
         <div class="muted">{{ log.message }}</div>
       </el-timeline-item>
     </el-timeline>

@@ -1,7 +1,7 @@
-import request, { downloadFile } from '../utils/request';
+import request, { downloadFile, downloadTextFile } from '../utils/request';
 import { mockReports } from '../mocks/report';
 import type { ID, PageQuery, PageResult, ReportItem } from './types';
-import { fetchLocalTemplates, type TemplateItem } from './template';
+import type { TemplateItem } from './template';
 import { useModuleMock } from './mock';
 
 const useMock = useModuleMock('VITE_USE_REPORT_MOCK', false);
@@ -20,23 +20,8 @@ interface ReportCreateRequest {
 export type ReportTemplate = TemplateItem;
 type DownloadUrlResponse = string | { url: string; [key: string]: unknown };
 
-export async function uploadReportTemplate(data: { projectId: ID; templateName: string; templateType: string; file: File; scenario?: string; versionNo?: string; description?: string }) {
-  if (useMock) return { templateId: Date.now(), projectId: data.projectId, fileId: 4300, status: 'SUCCESS' } satisfies Partial<ReportTemplate>;
-  const form = new FormData();
-  form.append('projectId', String(data.projectId));
-  form.append('templateName', data.templateName);
-  form.append('templateType', data.templateType);
-  if (data.scenario) form.append('scenario', data.scenario);
-  if (data.versionNo) form.append('versionNo', data.versionNo);
-  if (data.description) form.append('description', data.description);
-  form.append('file', data.file);
-  return request.post<ReportTemplate>('/report/templates', form);
-}
-
 export async function fetchReportTemplates(projectId?: ID) {
-  if (useMock) return [] as ReportTemplate[];
-  const remote = await request.get<ReportTemplate[]>('/report/templates', { params: { projectId } });
-  return [...fetchLocalTemplates({ projectId, templateCategory: 'REPORT' }), ...remote] as ReportTemplate[];
+  return request.get<ReportTemplate[]>('/report/templates', { params: { projectId, status: 'ENABLED' } });
 }
 
 export async function fetchReportTemplateVariables(templateId: ID) {
@@ -51,12 +36,18 @@ export async function createReport(data: ReportCreateRequest) {
 
 export async function fetchReports(params: PageQuery = {}) {
   const records = mockReports.filter((item) => !params.projectId || String(item.projectId) === String(params.projectId));
-  if (useMock) return { pageNo: params.pageNo || 1, pageSize: params.pageSize || 20, total: records.length, records } satisfies PageResult<ReportItem>;
+  if (useMock) {
+    return { pageNo: params.pageNo || 1, pageSize: params.pageSize || 20, total: records.length, records } satisfies PageResult<ReportItem>;
+  }
   return request.get<PageResult<ReportItem>>('/reports', { params });
 }
 
 export async function fetchReportDetail(reportId: ID) {
-  if (useMock) return mockReports.find((item) => String(item.reportId) === String(reportId)) || mockReports[0];
+  if (useMock) {
+    const item = mockReports.find((report) => String(report.reportId) === String(reportId));
+    if (!item) throw new Error(`报告不存在：${reportId}`);
+    return item;
+  }
   return request.get<ReportItem>(`/reports/${reportId}`);
 }
 
@@ -71,7 +62,7 @@ export async function fetchReportDownloadUrl(reportId: ID, format: 'WORD' | 'PDF
 }
 
 export async function downloadReport(reportId: ID, format: 'WORD' | 'PDF' = 'WORD', filename?: string) {
-  if (useMock) return downloadFile('', { filename: filename || `report-${reportId}.${format === 'PDF' ? 'pdf' : 'docx'}`, data: 'mock report content' });
+  if (useMock) return downloadTextFile(filename || `report-${reportId}.${format === 'PDF' ? 'pdf' : 'docx'}`, 'mock report content');
   const url = await fetchReportDownloadUrl(reportId, format);
   if (!url) throw new Error('报告下载地址为空，请检查后端报告下载接口');
   return downloadFile(url, { filename });

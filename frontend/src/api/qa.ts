@@ -53,9 +53,11 @@ export async function fetchQaMessages(sessionId: ID) {
   return request.get<QaMessage[]>(`/qa/sessions/${sessionId}/messages`);
 }
 
-export async function sendQuestion(sessionId: ID, data: { projectId: ID; question: string; routeMode?: string; dataSourceIds?: ID[]; knowledgeBaseIds?: ID[] }) {
+export async function sendQuestion(sessionId: ID, data: { question: string; routeMode?: string; dataSourceIds?: ID[]; knowledgeBaseIds?: ID[] }, projectId?: ID) {
   if (useMock) {
-    const answer = buildAssistantMessage(sessionId, data.projectId, data.question);
+    const mockProjectId = projectId || mockSessions.find((item) => String(item.sessionId) === String(sessionId))?.projectId;
+    if (!mockProjectId) throw new Error(`问答 mock 会话缺少项目编号：${sessionId}`);
+    const answer = buildAssistantMessage(sessionId, mockProjectId, data.question);
     mockMessages.push(answer);
     return answer;
   }

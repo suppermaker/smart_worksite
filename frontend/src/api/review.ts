@@ -1,11 +1,10 @@
 
 import request from '../utils/request';
 import { mockReviewRecord, mockReviewTemplates } from '../mocks/review';
-import type { ID, ReviewRecord, ReviewTemplate } from './types';
+import type { ID, PageQuery, PageResult, ReviewRecord, ReviewTemplate } from './types';
 import { useModuleMock } from './mock';
-import { fetchLocalTemplates } from './template';
 
-const useReviewRecordMock = useModuleMock('VITE_USE_REVIEW_RECORD_MOCK', true);
+const useReviewRecordMock = useModuleMock('VITE_USE_REVIEW_RECORD_MOCK', false);
 const useReviewTemplateMock = useModuleMock('VITE_USE_REVIEW_TEMPLATE_MOCK', false);
 const mockRecords: ReviewRecord[] = [mockReviewRecord];
 
@@ -17,24 +16,15 @@ function filterMockReviewTemplates(projectId?: ID) {
   return projectId ? mockReviewTemplates.filter((item) => String(item.projectId) === String(projectId)) : mockReviewTemplates;
 }
 
-export async function uploadReviewTemplate(data: { projectId: ID; templateName: string; templateType: string; file: File }) {
-  if (useReviewTemplateMock) return { ...mockReviewTemplates[0], ...data, fileId: 4101, id: mockId(), templateId: mockId() } satisfies ReviewTemplate;
-  const form = new FormData();
-  form.append('projectId', String(data.projectId));
-  form.append('templateName', data.templateName);
-  form.append('templateType', data.templateType);
-  form.append('file', data.file);
-  return request.post<ReviewTemplate>('/review/templates', form);
+function findMockReviewRecord(recordId: ID) {
+  const item = mockRecords.find((record) => String(record.recordId) === String(recordId));
+  if (!item) throw new Error(`审查记录不存在：${recordId}`);
+  return item;
 }
 
 export async function fetchReviewTemplates(projectId?: ID) {
   if (useReviewTemplateMock) return filterMockReviewTemplates(projectId);
-  try {
-    const remote = await request.get<ReviewTemplate[]>('/review/templates', { params: { projectId } });
-    return [...fetchLocalTemplates({ projectId, templateCategory: 'REVIEW' }), ...remote] as ReviewTemplate[];
-  } catch {
-    return [...fetchLocalTemplates({ projectId, templateCategory: 'REVIEW' }), ...filterMockReviewTemplates(projectId)] as ReviewTemplate[];
-  }
+  return request.get<ReviewTemplate[]>('/review/templates', { params: { projectId, status: 'ENABLED' } });
 }
 
 export async function submitReviewRecord(data: { projectId: ID; templateId: ID; file: File }) {
@@ -53,6 +43,32 @@ export async function submitReviewRecord(data: { projectId: ID; templateId: ID; 
 }
 
 export async function fetchReviewRecord(recordId: ID) {
-  if (useReviewRecordMock) return mockRecords.find((item) => String(item.recordId) === String(recordId)) || { ...mockReviewRecord, recordId } satisfies ReviewRecord;
+  if (useReviewRecordMock) return findMockReviewRecord(recordId);
   return request.get<ReviewRecord>(`/review/records/${recordId}`);
+}
+
+
+export async function fetchReviewRecords(params: PageQuery = {}) {
+  if (useReviewRecordMock) return { pageNo: params.pageNo || 1, pageSize: params.pageSize || 20, total: mockRecords.length, records: mockRecords } satisfies PageResult<ReviewRecord>;
+  return request.get<PageResult<ReviewRecord>>('/review/records', { params });
+}
+
+export async function retryReviewRecord(recordId: ID) {
+  if (useReviewRecordMock) return { ...findMockReviewRecord(recordId), status: 'QUEUED' } satisfies ReviewRecord;
+  return request.post<ReviewRecord>(`/review/records/${recordId}/retry`);
+}
+
+export async function deleteReviewRecord(recordId: ID) {
+  if (useReviewRecordMock) return null;
+  return request.delete<null>(`/review/records/${recordId}`);
+}
+
+export async function archiveReviewRecord(recordId: ID) {
+  if (useReviewRecordMock) return { ...findMockReviewRecord(recordId), status: 'ARCHIVED' } satisfies ReviewRecord;
+  return request.post<ReviewRecord>(`/review/records/${recordId}/archive`);
+}
+
+export async function updateReviewIssue(recordId: ID, issueId: string, data: { status: string; comment?: string }) {
+  if (useReviewRecordMock) return findMockReviewRecord(recordId);
+  return request.put<ReviewRecord>(`/review/records/${recordId}/issues/${issueId}`, data);
 }
