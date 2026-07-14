@@ -577,6 +577,8 @@ order by id desc;
 - 详情接口显示 `status=FAILED`。
 - `errorMessage` 中会包含 Python OCR 服务调用失败信息。
 
+如果本地异步任务显示 `errorMessage=未登录`，优先确认后端版本包含 OCR Worker 的系统安全文件访问逻辑；OCR Worker 不应依赖提交请求线程的登录态。
+
 ### 14.5 Qwen VL 密钥缺失
 
 如果 Python 中 `QWEN_VL_API_KEY` 和 `QWEN_API_KEY` 都为空：

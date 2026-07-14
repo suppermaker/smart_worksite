@@ -176,6 +176,7 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - File upload and parse-task creation must read back persisted records before returning success; if records are not readable, fail visibly and clean up uploaded storage objects where applicable.
 - AI, RAG, OCR, Embedding, vector retrieval, and document-parsing integrations must be adapter-based; do not implement algorithm core logic in Java controllers or application services.
 - Long-running operations such as report generation, OCR recognition, knowledge indexing, and document parsing must use async tasks or status records instead of blocking HTTP requests for the whole job. Task status values are `PENDING`, `QUEUED`, `RUNNING`, `SUCCESS`, `FAILED`, `RETRYING`, and `CANCELED`.
+- Async workers such as OCR recognition must not depend on request-thread `SecurityContext`; they must re-check the target project through system-safe project/file access methods before reading files or calling external services.
 - Report creation APIs must return the created report in `PENDING` state and create a `QUEUED` task after writing `task_outbox`; actual CryptoAgentV3 execution belongs to the worker path and must re-check project writability before calling the external service. If CryptoAgentV3 is unavailable, tests may use fake clients, but production code must fail visibly and record task/report errors instead of falling back silently.
 - Report creation requires explicit `reportName`; do not derive a default report name from `reportType`. CryptoAgentV3 generated DOCX payloads must include a non-blank filename; blank filenames must fail the task visibly instead of creating fallback file names.
 - Task retry and cancel APIs must fail fast on stale or invalid states. Retrying is allowed only for `FAILED` tasks within the retry limit. Canceling terminal tasks must return a conflict instead of silently succeeding. Running tasks record `cancel_requested=true` and must be stopped by the worker cooperatively.
@@ -214,6 +215,7 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - Development may use mock data when the backend API is not available, but mock mode must be explicitly enabled through environment variables and must not be the default for real integration.
 - Frontend API failures must remain visible to users; do not return fake success, fake empty lists, or mock fallback data after a real backend call fails.
 - Project management must have a single primary frontend entry; avoid duplicate pages that implement the same project CRUD flow.
+- Project member management should be reached from project management context, such as a project-row drawer or detail section, rather than a separate left-menu entry.
 - All HTTP calls must go through `frontend/src/utils/request.ts`.
 - Requests should automatically attach `Authorization` when a token exists.
 - Requests should automatically attach `X-Request-Id`.
@@ -233,6 +235,7 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - Report and review creation pages must load only enabled templates. Review issue status updates must use backend enum values `OPEN`, `PROCESSING`, `RESOLVED`, and `IGNORED`.
 - Template upload UI should restrict report/review template files to formats the backend can parse for variables or review context; do not present unsupported template formats as normal upload options.
 - Single-file business flows such as template upload, review submit, and OCR submit must render upload controls as single-file controls; do not allow multi-select and then silently submit only the first file.
+- Policy/news crawler UI may use an explicit `VITE_USE_POLICY_MOCK` switch until Java backend policy APIs exist; frontend must still never crawl external websites or call Python services directly.
 - AI results should expose traceable information where available, such as sources, confidence, raw JSON, or document references.
 - Frontend report-template upload APIs must pass explicit `templateName` and `templateType`; do not derive them from the filename or rely on backend fallback metadata.
 
@@ -243,6 +246,8 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - Prefer a light theme.
 - Use industrial blue as the primary color, with teal and construction orange as accent colors.
 - Use a left-side menu, top project switcher, and card-based content sections.
+- The frontend navigation should follow user task flow instead of implementation modules: keep `工作台`, group `智能问答`、`合规审查`、`报告生成`、`OCR识别` under intelligent applications, group knowledge bases/data sources under knowledge assets, and keep tasks/audit/configuration as supporting areas. Review document upload belongs inside `合规审查`, not as a separate left-menu entry.
+- The workbench should make the four primary user actions obvious on first screen: ask questions, review documents, generate reports, and recognize materials.
 - Do not use a pure big-screen dashboard style.
 - Do not use dark mode as the default.
 - Do not use a flashy consumer AI chat product style.

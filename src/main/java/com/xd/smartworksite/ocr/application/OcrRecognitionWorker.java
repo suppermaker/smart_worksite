@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xd.smartworksite.ai.infra.AiProviderResponse;
 import com.xd.smartworksite.common.exception.BusinessException;
+import com.xd.smartworksite.common.result.ErrorCode;
 import com.xd.smartworksite.file.application.FileObjectApplicationService;
 import com.xd.smartworksite.file.dto.FileAccessUrlResponse;
 import com.xd.smartworksite.file.dto.FileObjectResponse;
@@ -13,6 +14,7 @@ import com.xd.smartworksite.ocr.domain.TaskStageLog;
 import com.xd.smartworksite.ocr.infra.OcrProviderRequest;
 import com.xd.smartworksite.ocr.infra.OcrPythonServiceClient;
 import com.xd.smartworksite.ocr.repository.OcrRepository;
+import com.xd.smartworksite.project.application.ProjectAccessApplicationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -34,15 +36,18 @@ public class OcrRecognitionWorker {
     private final OcrRepository ocrRepository;
     private final FileObjectApplicationService fileObjectApplicationService;
     private final OcrPythonServiceClient ocrPythonServiceClient;
+    private final ProjectAccessApplicationService projectAccessApplicationService;
     private final ObjectMapper objectMapper;
 
     public OcrRecognitionWorker(OcrRepository ocrRepository,
                                 FileObjectApplicationService fileObjectApplicationService,
                                 OcrPythonServiceClient ocrPythonServiceClient,
+                                ProjectAccessApplicationService projectAccessApplicationService,
                                 ObjectMapper objectMapper) {
         this.ocrRepository = ocrRepository;
         this.fileObjectApplicationService = fileObjectApplicationService;
         this.ocrPythonServiceClient = ocrPythonServiceClient;
+        this.projectAccessApplicationService = projectAccessApplicationService;
         this.objectMapper = objectMapper;
     }
 
@@ -59,8 +64,12 @@ public class OcrRecognitionWorker {
             ocrRepository.updateTaskStatus(record.getTaskId(), TASK_STATUS_RUNNING, STAGE_OCR_RECOGNITION, null);
             saveStageLog(record, TASK_STATUS_RUNNING, "OCR识别开始", null, null, null);
 
-            FileObjectResponse file = fileObjectApplicationService.getFile(record.getFileId());
-            FileAccessUrlResponse accessUrl = fileObjectApplicationService.createAccessUrl(
+            projectAccessApplicationService.requireProjectWritableForSystem(record.getProjectId());
+            FileObjectResponse file = fileObjectApplicationService.getFileForSystem(record.getFileId());
+            if (!record.getProjectId().equals(file.getProjectId())) {
+                throw new BusinessException(ErrorCode.CONFLICT, "OCR file project mismatch");
+            }
+            FileAccessUrlResponse accessUrl = fileObjectApplicationService.createAccessUrlForSystem(
                     record.getFileId(), "DOWNLOAD", FILE_URL_EXPIRE_SECONDS);
             OcrProviderRequest request = buildProviderRequest(record, file, accessUrl.getUrl());
             AiProviderResponse providerResponse = ocrPythonServiceClient.recognize(record.getProjectId(), request);

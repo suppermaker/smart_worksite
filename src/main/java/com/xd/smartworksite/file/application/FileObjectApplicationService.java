@@ -135,9 +135,25 @@ public class FileObjectApplicationService {
         return toResponse(fileObject);
     }
 
+    public FileObjectResponse getFileForSystem(Long fileId) {
+        FileObject fileObject = findActiveFile(fileId);
+        projectAccessApplicationService.requireProject(fileObject.getProjectId());
+        return toResponse(fileObject);
+    }
+
     public FileAccessUrlResponse createAccessUrl(Long fileId, String usage, Integer expireSeconds) {
         FileObject fileObject = findActiveFile(fileId);
         projectAccessApplicationService.requireProjectAccess(fileObject.getProjectId());
+        return createAccessUrl(fileObject, usage, expireSeconds);
+    }
+
+    public FileAccessUrlResponse createAccessUrlForSystem(Long fileId, String usage, Integer expireSeconds) {
+        FileObject fileObject = findActiveFile(fileId);
+        projectAccessApplicationService.requireProject(fileObject.getProjectId());
+        return createAccessUrl(fileObject, usage, expireSeconds);
+    }
+
+    private FileAccessUrlResponse createAccessUrl(FileObject fileObject, String usage, Integer expireSeconds) {
         String normalizedUsage = usage == null ? "" : usage.trim().toUpperCase(Locale.ROOT);
         if (!"DOWNLOAD".equals(normalizedUsage) && !"PREVIEW".equals(normalizedUsage)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "usage must be DOWNLOAD or PREVIEW");
