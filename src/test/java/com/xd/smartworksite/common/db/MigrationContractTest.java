@@ -94,6 +94,19 @@ class MigrationContractTest {
     }
 
     @Test
+    void templateVariableDescriptionMigrationUsesFileScopedUniqueKey() throws IOException {
+        String migration = Files.readString(
+                MIGRATION_DIR.resolve("V17__add_template_variable_descriptions.sql"),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(migration).contains("CREATE TABLE template_variable_description");
+        assertThat(migration).contains("project_id BIGINT NOT NULL");
+        assertThat(migration).contains("UNIQUE KEY uk_template_file_variable (template_id, file_id, variable_name)");
+        assertThat(migration).contains("deleted TINYINT NOT NULL DEFAULT 0");
+    }
+
+    @Test
     void fileDownloadContractUsesAccessUrlEndpoint() throws IOException {
         String readme = Files.readString(README, StandardCharsets.UTF_8);
         String frontendFileApi = Files.readString(FRONTEND_FILE_API, StandardCharsets.UTF_8);

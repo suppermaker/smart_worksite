@@ -10,6 +10,8 @@ It must support upload, download URL generation, preview URL generation, logical
 
 Use this module as the single backend entry point for file metadata and MinIO object operations. Other modules such as `knowledge`, `report`, `ocr`, `review`, and `qa` should reference files by `file_id` or call this module through its application service or facade. They must not call MinIO or this module's mapper directly.
 
+Template preview and variable parsing use `FileObjectApplicationService.openFileContent(...)`. This internal application-service method validates active status, project access, expected project ownership, and expected business binding before opening the MinIO stream. Callers own and must close the returned stream.
+
 ## Storage Model
 
 Use MySQL for file metadata and MinIO for binary object storage.

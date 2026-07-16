@@ -3,12 +3,23 @@ package com.xd.smartworksite.template.controller;
 import com.xd.smartworksite.common.result.ApiResponse;
 import com.xd.smartworksite.common.result.PageResult;
 import com.xd.smartworksite.template.application.TemplateApplicationService;
+import com.xd.smartworksite.template.application.TemplatePreviewApplicationService;
+import com.xd.smartworksite.template.application.TemplateVariableApplicationService;
 import com.xd.smartworksite.template.domain.TemplateCategory;
 import com.xd.smartworksite.template.dto.TemplateQueryRequest;
+import com.xd.smartworksite.template.dto.TemplatePreviewFile;
 import com.xd.smartworksite.template.dto.TemplateResponse;
 import com.xd.smartworksite.template.dto.TemplateStatusResponse;
 import com.xd.smartworksite.template.dto.TemplateUpdateRequest;
+import com.xd.smartworksite.template.dto.TemplateVariableDescriptionResponse;
+import com.xd.smartworksite.template.dto.TemplateVariableDescriptionUpsertRequest;
 import jakarta.validation.Valid;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.InvalidMediaTypeException;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,15 +32,24 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/templates")
 @Validated
 public class TemplateController {
 
     private final TemplateApplicationService templateApplicationService;
+    private final TemplatePreviewApplicationService templatePreviewApplicationService;
+    private final TemplateVariableApplicationService templateVariableApplicationService;
 
-    public TemplateController(TemplateApplicationService templateApplicationService) {
+    public TemplateController(TemplateApplicationService templateApplicationService,
+                              TemplatePreviewApplicationService templatePreviewApplicationService,
+                              TemplateVariableApplicationService templateVariableApplicationService) {
         this.templateApplicationService = templateApplicationService;
+        this.templatePreviewApplicationService = templatePreviewApplicationService;
+        this.templateVariableApplicationService = templateVariableApplicationService;
     }
 
     @PostMapping
@@ -77,6 +97,48 @@ public class TemplateController {
     public ApiResponse<Void> deleteTemplate(@PathVariable Long templateId) {
         templateApplicationService.deleteTemplate(templateId);
         return ApiResponse.success();
+    }
+
+    @GetMapping("/{templateId}/preview")
+    public ResponseEntity<InputStreamResource> previewTemplate(@PathVariable Long templateId) {
+        TemplatePreviewFile preview = templatePreviewApplicationService.openPreview(templateId);
+        ContentDisposition disposition = ContentDisposition.builder("inline")
+                .filename(preview.getFileName(), StandardCharsets.UTF_8)
+                .build();
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .contentType(resolveMediaType(preview.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header(HttpHeaders.CACHE_CONTROL, "no-store");
+        if (preview.getFileSize() >= 0) {
+            builder.contentLength(preview.getFileSize());
+        }
+        return builder.body(new InputStreamResource(preview.getInputStream()));
+    }
+
+    private MediaType resolveMediaType(String contentType) {
+        try {
+            return MediaType.parseMediaType(contentType);
+        } catch (InvalidMediaTypeException ex) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
+    }
+
+    @GetMapping("/{templateId}/variables")
+    public ApiResponse<List<String>> listTemplateVariables(@PathVariable Long templateId) {
+        return ApiResponse.success(templateVariableApplicationService.listVariables(templateId));
+    }
+
+    @PutMapping("/{templateId}/variables/descriptions")
+    public ApiResponse<List<TemplateVariableDescriptionResponse>> upsertVariableDescriptions(
+            @PathVariable Long templateId,
+            @Valid @RequestBody TemplateVariableDescriptionUpsertRequest request) {
+        return ApiResponse.success(templateVariableApplicationService.upsertDescriptions(templateId, request));
+    }
+
+    @GetMapping("/{templateId}/variables/descriptions")
+    public ApiResponse<List<TemplateVariableDescriptionResponse>> listVariableDescriptions(
+            @PathVariable Long templateId) {
+        return ApiResponse.success(templateVariableApplicationService.listDescriptions(templateId));
     }
 
     @PostMapping("/report")

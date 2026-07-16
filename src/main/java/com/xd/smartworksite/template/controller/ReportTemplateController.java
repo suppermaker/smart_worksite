@@ -2,6 +2,7 @@ package com.xd.smartworksite.template.controller;
 
 import com.xd.smartworksite.common.result.ApiResponse;
 import com.xd.smartworksite.template.application.TemplateApplicationService;
+import com.xd.smartworksite.template.application.TemplateVariableApplicationService;
 import com.xd.smartworksite.template.domain.TemplateCategory;
 import com.xd.smartworksite.template.dto.TemplateQueryRequest;
 import com.xd.smartworksite.template.dto.TemplateResponse;
@@ -22,9 +23,12 @@ import java.util.List;
 public class ReportTemplateController {
 
     private final TemplateApplicationService templateApplicationService;
+    private final TemplateVariableApplicationService templateVariableApplicationService;
 
-    public ReportTemplateController(TemplateApplicationService templateApplicationService) {
+    public ReportTemplateController(TemplateApplicationService templateApplicationService,
+                                    TemplateVariableApplicationService templateVariableApplicationService) {
         this.templateApplicationService = templateApplicationService;
+        this.templateVariableApplicationService = templateVariableApplicationService;
     }
 
     @PostMapping
@@ -47,6 +51,6 @@ public class ReportTemplateController {
 
     @GetMapping("/{templateId}/variables")
     public ApiResponse<List<String>> listReportTemplateVariables(@PathVariable Long templateId) {
-        return ApiResponse.success(templateApplicationService.listTemplateVariables(templateId));
+        return ApiResponse.success(templateVariableApplicationService.listReportVariables(templateId));
     }
 }

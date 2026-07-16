@@ -13,48 +13,47 @@ import com.xd.smartworksite.template.domain.FileObjectRecord;
 import com.xd.smartworksite.template.domain.Template;
 import com.xd.smartworksite.template.domain.TemplateCategory;
 import com.xd.smartworksite.template.domain.TemplateStatus;
+import com.xd.smartworksite.template.domain.TemplateVariableDescription;
 import com.xd.smartworksite.template.dto.TemplateQueryRequest;
 import com.xd.smartworksite.template.dto.TemplateResponse;
 import com.xd.smartworksite.template.dto.TemplateUpdateRequest;
+import com.xd.smartworksite.template.infra.TemplateVariableScanner;
 import com.xd.smartworksite.template.repository.TemplateRepository;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.apache.poi.xwpf.usermodel.XWPFParagraph;
-import org.apache.poi.xwpf.usermodel.XWPFTable;
-import org.apache.poi.xwpf.usermodel.XWPFTableCell;
-import org.apache.poi.xwpf.usermodel.XWPFTableRow;
+import com.xd.smartworksite.template.repository.TemplateVariableDescriptionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Service
 public class TemplateApplicationService {
 
+    private static final Logger log = LoggerFactory.getLogger(TemplateApplicationService.class);
     private static final String FILE_STATUS_ACTIVE = "ACTIVE";
-    private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\$\\{\\s*([^}]+?)\\s*}|\\{\\{\\s*([^}]+?)\\s*}}");
 
     private final TemplateRepository templateRepository;
+    private final TemplateVariableDescriptionRepository variableDescriptionRepository;
     private final ProjectAccessApplicationService projectAccessApplicationService;
     private final StorageAdapter storageAdapter;
+    private final TemplateVariableScanner variableScanner;
 
     public TemplateApplicationService(TemplateRepository templateRepository,
+                                      TemplateVariableDescriptionRepository variableDescriptionRepository,
                                       ProjectAccessApplicationService projectAccessApplicationService,
-                                      StorageAdapter storageAdapter) {
+                                      StorageAdapter storageAdapter,
+                                      TemplateVariableScanner variableScanner) {
         this.templateRepository = templateRepository;
+        this.variableDescriptionRepository = variableDescriptionRepository;
         this.projectAccessApplicationService = projectAccessApplicationService;
         this.storageAdapter = storageAdapter;
+        this.variableScanner = variableScanner;
     }
 
     @Transactional
@@ -76,6 +75,9 @@ public class TemplateApplicationService {
 
         String normalizedVersion = normalizeVersion(versionNo);
         String originalFilename = normalizeFileName(file.getOriginalFilename());
+        List<String> reportVariables = category == TemplateCategory.REPORT
+                ? scanReportTemplateVariables(originalFilename, file)
+                : List.of();
         String objectName = buildObjectName(projectId, category.name(), originalFilename);
         StorageObject storageObject;
         try {
@@ -86,39 +88,83 @@ public class TemplateApplicationService {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "上传模板文件失败");
         }
 
-        FileObjectRecord fileObject = new FileObjectRecord();
-        fileObject.setProjectId(projectId);
-        fileObject.setBizType(category == TemplateCategory.REPORT ? "REPORT_TEMPLATE" : "REVIEW_TEMPLATE");
-        fileObject.setFileName(originalFilename);
-        fileObject.setObjectName(storageObject.getObjectName());
-        fileObject.setContentType(storageObject.getContentType());
-        fileObject.setFileSize(storageObject.getSize());
-        fileObject.setStatus(FILE_STATUS_ACTIVE);
-        fileObject.setMetadata("{}");
-        templateRepository.saveFileObject(fileObject);
-        if (fileObject.getId() == null) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "template file id was not generated");
-        }
+        try {
+            FileObjectRecord fileObject = new FileObjectRecord();
+            fileObject.setProjectId(projectId);
+            fileObject.setBizType(category == TemplateCategory.REPORT ? "REPORT_TEMPLATE" : "REVIEW_TEMPLATE");
+            fileObject.setFileName(originalFilename);
+            fileObject.setObjectName(storageObject.getObjectName());
+            fileObject.setContentType(storageObject.getContentType());
+            fileObject.setFileSize(storageObject.getSize());
+            fileObject.setStatus(FILE_STATUS_ACTIVE);
+            fileObject.setMetadata("{}");
+            templateRepository.saveFileObject(fileObject);
+            if (fileObject.getId() == null) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "template file id was not generated");
+            }
 
-        Template template = new Template();
-        template.setProjectId(projectId);
-        template.setTemplateName(templateName.trim());
-        template.setTemplateCategory(category.name());
-        template.setTemplateType(templateType.trim());
-        template.setScenario(trimToNull(scenario));
-        template.setVersionNo(normalizedVersion);
-        template.setFileId(fileObject.getId());
-        template.setStatus(TemplateStatus.ENABLED.name());
-        template.setDescription(trimToNull(description));
-        template.setMetadata("{}");
-        templateRepository.save(template);
-        if (template.getId() == null) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "template id was not generated");
-        }
-        requireUpdated(templateRepository.updateFileBizId(fileObject.getId(), template.getId()), "template file business id update failed");
+            Template template = new Template();
+            template.setProjectId(projectId);
+            template.setTemplateName(templateName.trim());
+            template.setTemplateCategory(category.name());
+            template.setTemplateType(templateType.trim());
+            template.setScenario(trimToNull(scenario));
+            template.setVersionNo(normalizedVersion);
+            template.setFileId(fileObject.getId());
+            template.setStatus(TemplateStatus.ENABLED.name());
+            template.setDescription(trimToNull(description));
+            template.setMetadata("{}");
+            templateRepository.save(template);
+            if (template.getId() == null) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "template id was not generated");
+            }
+            requireUpdated(templateRepository.updateFileBizId(fileObject.getId(), template.getId()), "template file business id update failed");
+            if (category == TemplateCategory.REPORT) {
+                persistParsedReportVariables(template, fileObject.getId(), reportVariables);
+            }
 
-        return toResponse(templateRepository.findById(template.getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.SYSTEM_ERROR, "template record is not readable")));
+            return toResponse(templateRepository.findById(template.getId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.SYSTEM_ERROR, "template record is not readable")));
+        } catch (RuntimeException ex) {
+            cleanupUploadedObject(storageObject.getObjectName());
+            throw ex;
+        }
+    }
+
+    private List<String> scanReportTemplateVariables(String fileName, MultipartFile file) {
+        try (var inputStream = file.getInputStream()) {
+            return variableScanner.scan(fileName, inputStream);
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, ex.getMessage());
+        } catch (IOException | RuntimeException ex) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "报告模板文件损坏或无法解析");
+        }
+    }
+
+    private void persistParsedReportVariables(Template template, Long fileId, List<String> variableNames) {
+        Long operatorId = SecurityUtils.getCurrentUserId();
+        for (String variableName : variableNames) {
+            TemplateVariableDescription record = new TemplateVariableDescription();
+            record.setProjectId(template.getProjectId());
+            record.setTemplateId(template.getId());
+            record.setFileId(fileId);
+            record.setVariableName(variableName);
+            record.setDescription("");
+            record.setCreatedBy(operatorId);
+            record.setUpdatedBy(operatorId);
+            int inserted = variableDescriptionRepository.insert(record);
+            if (inserted <= 0 || record.getId() == null) {
+                throw new BusinessException(ErrorCode.CONFLICT, "报告模板变量写入失败");
+            }
+        }
+    }
+
+    private void cleanupUploadedObject(String objectName) {
+        try {
+            storageAdapter.delete(objectName);
+        } catch (RuntimeException cleanupEx) {
+            log.warn("cleanup uploaded template object failed, objectName={}", objectName, cleanupEx);
+        }
     }
 
     public PageResult<TemplateResponse> queryTemplates(TemplateQueryRequest request) {
@@ -171,21 +217,6 @@ public class TemplateApplicationService {
         Template template = requireTemplate(templateId);
         projectAccessApplicationService.requireProjectAccess(template.getProjectId());
         return toResponse(template);
-    }
-
-    public List<String> listTemplateVariables(Long templateId) {
-        Template template = requireTemplate(templateId);
-        projectAccessApplicationService.requireProjectAccess(template.getProjectId());
-        if (!TemplateCategory.REPORT.name().equals(template.getTemplateCategory())) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "template is not a report template");
-        }
-        FileObjectRecord fileObject = templateRepository.findFileObjectById(template.getFileId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "template file not found"));
-        if (!template.getProjectId().equals(fileObject.getProjectId())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "template file project mismatch");
-        }
-        String text = readTemplateText(fileObject);
-        return extractVariables(text);
     }
 
     @Transactional
@@ -322,57 +353,6 @@ public class TemplateApplicationService {
             return null;
         }
         return value.trim();
-    }
-
-    private String readTemplateText(FileObjectRecord fileObject) {
-        String filename = fileObject.getFileName() == null ? "" : fileObject.getFileName().toLowerCase(Locale.ROOT);
-        try (InputStream inputStream = storageAdapter.openObject(fileObject.getObjectName())) {
-            if (filename.endsWith(".docx")) {
-                return readDocxText(inputStream);
-            }
-            if (filename.endsWith(".txt") || filename.endsWith(".md")) {
-                return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-            }
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "report template variable parsing supports DOCX, TXT or MD files");
-        } catch (BusinessException ex) {
-            throw ex;
-        } catch (IOException ex) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "读取报告模板变量失败");
-        } catch (RuntimeException ex) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "报告模板文件读取失败");
-        }
-    }
-
-    private String readDocxText(InputStream inputStream) throws IOException {
-        StringBuilder builder = new StringBuilder();
-        try (XWPFDocument document = new XWPFDocument(inputStream)) {
-            for (XWPFParagraph paragraph : document.getParagraphs()) {
-                builder.append(paragraph.getText()).append('\n');
-            }
-            for (XWPFTable table : document.getTables()) {
-                for (XWPFTableRow row : table.getRows()) {
-                    for (XWPFTableCell cell : row.getTableCells()) {
-                        builder.append(cell.getText()).append('\n');
-                    }
-                }
-            }
-        }
-        return builder.toString();
-    }
-
-    private List<String> extractVariables(String text) {
-        if (text == null || text.isBlank()) {
-            throw new BusinessException(ErrorCode.CONFLICT, "report template content is empty");
-        }
-        Set<String> variables = new LinkedHashSet<>();
-        Matcher matcher = VARIABLE_PATTERN.matcher(text);
-        while (matcher.find()) {
-            String value = matcher.group(1) == null ? matcher.group(2) : matcher.group(1);
-            if (value != null && !value.isBlank()) {
-                variables.add(value.trim());
-            }
-        }
-        return new ArrayList<>(variables);
     }
 
     private TemplateResponse toResponse(Template template) {

@@ -2,6 +2,8 @@ package com.xd.smartworksite.template.application;
 
 import com.xd.smartworksite.file.infra.StorageAdapter;
 import com.xd.smartworksite.file.infra.StorageObject;
+import com.xd.smartworksite.file.application.FileObjectApplicationService;
+import com.xd.smartworksite.file.application.FileObjectContent;
 import com.xd.smartworksite.auth.domain.ProjectMember;
 import com.xd.smartworksite.auth.mapper.ProjectMemberMapper;
 import com.xd.smartworksite.common.exception.BusinessException;
@@ -15,7 +17,10 @@ import com.xd.smartworksite.template.domain.Template;
 import com.xd.smartworksite.template.domain.TemplateStatus;
 import com.xd.smartworksite.template.dto.TemplateQueryRequest;
 import com.xd.smartworksite.template.dto.TemplateResponse;
+import com.xd.smartworksite.template.infra.TemplateVariableScanner;
 import com.xd.smartworksite.template.repository.TemplateRepository;
+import com.xd.smartworksite.template.repository.TemplateVariableDescriptionRepository;
+import com.xd.smartworksite.template.domain.TemplateVariableDescription;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +40,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class TemplateApplicationServiceTest {
 
@@ -54,17 +62,20 @@ class TemplateApplicationServiceTest {
     @Test
     void uploadReportTemplateStoresFileObjectAndTemplateMetadata() {
         InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
+        CapturingTemplateVariableDescriptionRepository variableRepository = new CapturingTemplateVariableDescriptionRepository();
         ProjectRepository projectRepository = projectRepository();
         TemplateApplicationService service = new TemplateApplicationService(
                 templateRepository,
+                variableRepository,
                 new ProjectAccessApplicationService(projectRepository, new EmptyProjectMemberMapper()),
-                new CapturingStorageAdapter()
+                new CapturingStorageAdapter(),
+                new TemplateVariableScanner()
         );
         MockMultipartFile file = new MockMultipartFile(
                 "file",
-                "report-template.docx",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "template".getBytes()
+                "report-template.md",
+                "text/markdown",
+                "项目：{{ var_project_name }}\n日期：{{ var_report_date }}\n重复：{{var_project_name}}".getBytes(StandardCharsets.UTF_8)
         );
 
         TemplateResponse response = service.uploadTemplate(
@@ -86,6 +97,17 @@ class TemplateApplicationServiceTest {
         assertThat(templateRepository.fileObjects).hasSize(1);
         assertThat(templateRepository.fileObjects.get(0).getBizType()).isEqualTo("REPORT_TEMPLATE");
         assertThat(templateRepository.fileObjects.get(0).getBizId()).isEqualTo(1L);
+        assertThat(variableRepository.records)
+                .extracting(TemplateVariableDescription::getVariableName)
+                .containsExactly("var_project_name", "var_report_date");
+        assertThat(variableRepository.records)
+                .allSatisfy(record -> {
+                    assertThat(record.getTemplateId()).isEqualTo(1L);
+                    assertThat(record.getFileId()).isEqualTo(1L);
+                    assertThat(record.getDescription()).isEmpty();
+                    assertThat(record.getCreatedBy()).isEqualTo(1L);
+                    assertThat(record.getUpdatedBy()).isEqualTo(1L);
+                });
     }
 
     @Test
@@ -117,8 +139,8 @@ class TemplateApplicationServiceTest {
         TemplateApplicationService service = newService(new InMemoryTemplateRepository(), new FailingStorageAdapter());
         MockMultipartFile file = new MockMultipartFile(
                 "file",
-                "report-template.docx",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "report-template.md",
+                "text/markdown",
                 "template".getBytes()
         );
 
@@ -134,6 +156,78 @@ class TemplateApplicationServiceTest {
         ))
                 .isInstanceOfSatisfying(com.xd.smartworksite.common.exception.BusinessException.class, ex ->
                         assertThat(ex.getMessage()).contains("上传模板文件失败"));
+    }
+
+    @Test
+    void reportTemplateParseFailureHappensBeforeStorageUpload() {
+        InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
+        CapturingStorageAdapter storageAdapter = new CapturingStorageAdapter();
+        CapturingTemplateVariableDescriptionRepository variableRepository = new CapturingTemplateVariableDescriptionRepository();
+        TemplateApplicationService service = newService(templateRepository, storageAdapter, variableRepository);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "broken.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "not-a-docx".getBytes(StandardCharsets.UTF_8)
+        );
+
+        assertThatThrownBy(() -> service.uploadTemplate(
+                1L, "REPORT", "损坏模板", "GENERAL", null, "v1", null, file
+        )).isInstanceOfSatisfying(BusinessException.class, ex ->
+                assertThat(ex.getMessage()).contains("损坏或无法解析"));
+
+        assertThat(storageAdapter.objects).isEmpty();
+        assertThat(templateRepository.fileObjects).isEmpty();
+        assertThat(variableRepository.records).isEmpty();
+    }
+
+    @Test
+    void reviewTemplateUploadDoesNotParseOrPersistVariables() {
+        InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
+        CapturingStorageAdapter storageAdapter = new CapturingStorageAdapter();
+        CapturingTemplateVariableDescriptionRepository variableRepository = new CapturingTemplateVariableDescriptionRepository();
+        TemplateApplicationService service = newService(templateRepository, storageAdapter, variableRepository);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "review-template.pdf",
+                "application/pdf",
+                "not-a-real-pdf {{ var_review_rule }}".getBytes(StandardCharsets.UTF_8)
+        );
+
+        TemplateResponse response = service.uploadTemplate(
+                1L, "REVIEW", "审查模板", "SAFETY_REVIEW", null, "v1", null, file
+        );
+
+        assertThat(response.getTemplateCategory()).isEqualTo("REVIEW");
+        assertThat(storageAdapter.objects).hasSize(1);
+        assertThat(variableRepository.records).isEmpty();
+    }
+
+    @Test
+    void variablePersistenceFailureDeletesUploadedObject() {
+        InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
+        CapturingStorageAdapter storageAdapter = new CapturingStorageAdapter();
+        TemplateApplicationService service = newService(
+                templateRepository,
+                storageAdapter,
+                new FailingTemplateVariableDescriptionRepository()
+        );
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "report-template.md",
+                "text/markdown",
+                "{{ var_project_name }}".getBytes(StandardCharsets.UTF_8)
+        );
+
+        assertThatThrownBy(() -> service.uploadTemplate(
+                1L, "REPORT", "报告模板", "GENERAL", null, "v1", null, file
+        )).isInstanceOfSatisfying(BusinessException.class, ex -> {
+            assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode());
+            assertThat(ex.getMessage()).contains("变量写入失败");
+        });
+
+        assertThat(storageAdapter.objects).isEmpty();
+        assertThat(storageAdapter.deletedObjectNames).hasSize(1);
     }
 
     @Test
@@ -167,7 +261,7 @@ class TemplateApplicationServiceTest {
     }
 
     @Test
-    void listReportTemplateVariablesParsesStoredTemplateContent() {
+    void unifiedTemplateVariablesParseStoredTemplateContentInFirstOccurrenceOrder() {
         InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
         CapturingStorageAdapter storageAdapter = new CapturingStorageAdapter();
         TemplateApplicationService service = newService(templateRepository, storageAdapter);
@@ -175,7 +269,7 @@ class TemplateApplicationServiceTest {
                 "file",
                 "report-template.md",
                 "text/markdown",
-                "项目：${ 项目名称 }\n编号：{{projectCode}}\n摘要：{{ 摘要 }}\n重复：${项目名称}".getBytes(StandardCharsets.UTF_8)
+                "项目：{{ var_project_name }}\n编号：{{var_project_code}}\n摘要：{{ var_summary }}\n重复：{{var_project_name}}".getBytes(StandardCharsets.UTF_8)
         );
         TemplateResponse uploaded = service.uploadTemplate(
                 1L,
@@ -188,13 +282,13 @@ class TemplateApplicationServiceTest {
                 file
         );
 
-        List<String> variables = service.listTemplateVariables(uploaded.getTemplateId());
+        List<String> variables = newVariableService(templateRepository, storageAdapter).listVariables(uploaded.getTemplateId());
 
-        assertThat(variables).containsExactly("项目名称", "projectCode", "摘要");
+        assertThat(variables).containsExactly("var_project_name", "var_project_code", "var_summary");
     }
 
     @Test
-    void listReportTemplateVariablesFailsFastWhenTemplateContentIsEmpty() {
+    void unifiedTemplateVariablesReturnEmptyListWhenTemplateHasNoVariables() {
         InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
         CapturingStorageAdapter storageAdapter = new CapturingStorageAdapter();
         TemplateApplicationService service = newService(templateRepository, storageAdapter);
@@ -215,13 +309,11 @@ class TemplateApplicationServiceTest {
                 file
         );
 
-        assertThatThrownBy(() -> service.listTemplateVariables(uploaded.getTemplateId()))
-                .isInstanceOfSatisfying(BusinessException.class, ex ->
-                        assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode()));
+        assertThat(newVariableService(templateRepository, storageAdapter).listVariables(uploaded.getTemplateId())).isEmpty();
     }
 
     @Test
-    void listReportTemplateVariablesRejectsReviewTemplate() {
+    void unifiedTemplateVariablesSupportReviewTemplate() {
         InMemoryTemplateRepository templateRepository = new InMemoryTemplateRepository();
         CapturingStorageAdapter storageAdapter = new CapturingStorageAdapter();
         TemplateApplicationService service = newService(templateRepository, storageAdapter);
@@ -229,7 +321,7 @@ class TemplateApplicationServiceTest {
                 "file",
                 "review-template.md",
                 "text/markdown",
-                "${ruleName}".getBytes(StandardCharsets.UTF_8)
+                "{{ var_rule_name }}".getBytes(StandardCharsets.UTF_8)
         );
         TemplateResponse uploaded = service.uploadTemplate(
                 1L,
@@ -242,9 +334,8 @@ class TemplateApplicationServiceTest {
                 file
         );
 
-        assertThatThrownBy(() -> service.listTemplateVariables(uploaded.getTemplateId()))
-                .isInstanceOfSatisfying(BusinessException.class, ex ->
-                        assertThat(ex.getCode()).isEqualTo(ErrorCode.PARAM_ERROR.getCode()));
+        assertThat(newVariableService(templateRepository, storageAdapter).listVariables(uploaded.getTemplateId()))
+                .containsExactly("var_rule_name");
     }
 
     @Test
@@ -282,10 +373,43 @@ class TemplateApplicationServiceTest {
     }
 
     private TemplateApplicationService newService(TemplateRepository templateRepository, StorageAdapter storageAdapter) {
+        return newService(templateRepository, storageAdapter, new CapturingTemplateVariableDescriptionRepository());
+    }
+
+    private TemplateApplicationService newService(TemplateRepository templateRepository,
+                                                  StorageAdapter storageAdapter,
+                                                  TemplateVariableDescriptionRepository variableRepository) {
         return new TemplateApplicationService(
                 templateRepository,
+                variableRepository,
                 new ProjectAccessApplicationService(projectRepository(), new EmptyProjectMemberMapper()),
-                storageAdapter
+                storageAdapter,
+                new TemplateVariableScanner()
+        );
+    }
+
+    private TemplateVariableApplicationService newVariableService(TemplateRepository templateRepository,
+                                                                  StorageAdapter storageAdapter) {
+        FileObjectApplicationService fileObjectApplicationService = mock(FileObjectApplicationService.class);
+        when(fileObjectApplicationService.openFileContent(anyLong(), anyLong(), anyLong())).thenAnswer(invocation -> {
+            Long fileId = invocation.getArgument(0);
+            FileObjectRecord file = templateRepository.findFileObjectById(fileId).orElseThrow();
+            return new FileObjectContent(
+                    file.getId(),
+                    file.getProjectId(),
+                    file.getBizId(),
+                    file.getFileName(),
+                    file.getContentType(),
+                    file.getFileSize(),
+                    storageAdapter.openObject(file.getObjectName())
+            );
+        });
+        return new TemplateVariableApplicationService(
+                templateRepository,
+                new EmptyTemplateVariableDescriptionRepository(),
+                new ProjectAccessApplicationService(projectRepository(), new EmptyProjectMemberMapper()),
+                fileObjectApplicationService,
+                new TemplateVariableScanner()
         );
     }
 
@@ -399,6 +523,7 @@ class TemplateApplicationServiceTest {
 
     private static class CapturingStorageAdapter implements StorageAdapter {
         private final java.util.Map<String, byte[]> objects = new java.util.HashMap<>();
+        private final List<String> deletedObjectNames = new ArrayList<>();
 
         @Override
         public StorageObject upload(String objectName, InputStream inputStream, long size, String contentType) {
@@ -428,6 +553,8 @@ class TemplateApplicationServiceTest {
 
         @Override
         public void delete(String objectName) {
+            deletedObjectNames.add(objectName);
+            objects.remove(objectName);
         }
     }
 
@@ -435,6 +562,70 @@ class TemplateApplicationServiceTest {
         @Override
         public StorageObject upload(String objectName, InputStream inputStream, long size, String contentType) {
             throw new IllegalStateException("storage down");
+        }
+    }
+
+    private static class EmptyTemplateVariableDescriptionRepository implements TemplateVariableDescriptionRepository {
+        @Override
+        public Optional<TemplateVariableDescription> findByKey(Long templateId, Long fileId, String variableName) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<TemplateVariableDescription> findActiveByTemplateAndFile(Long templateId, Long fileId) {
+            return List.of();
+        }
+
+        @Override
+        public int insert(TemplateVariableDescription description) {
+            return 0;
+        }
+
+        @Override
+        public int updateAndReactivate(TemplateVariableDescription description) {
+            return 0;
+        }
+    }
+
+    private static class CapturingTemplateVariableDescriptionRepository implements TemplateVariableDescriptionRepository {
+        private long nextId = 1L;
+        private final List<TemplateVariableDescription> records = new ArrayList<>();
+
+        @Override
+        public Optional<TemplateVariableDescription> findByKey(Long templateId, Long fileId, String variableName) {
+            return records.stream()
+                    .filter(record -> templateId.equals(record.getTemplateId()))
+                    .filter(record -> fileId.equals(record.getFileId()))
+                    .filter(record -> variableName.equals(record.getVariableName()))
+                    .findFirst();
+        }
+
+        @Override
+        public List<TemplateVariableDescription> findActiveByTemplateAndFile(Long templateId, Long fileId) {
+            return records.stream()
+                    .filter(record -> templateId.equals(record.getTemplateId()))
+                    .filter(record -> fileId.equals(record.getFileId()))
+                    .toList();
+        }
+
+        @Override
+        public int insert(TemplateVariableDescription description) {
+            description.setId(nextId++);
+            description.setDeleted(false);
+            records.add(description);
+            return 1;
+        }
+
+        @Override
+        public int updateAndReactivate(TemplateVariableDescription description) {
+            return 1;
+        }
+    }
+
+    private static class FailingTemplateVariableDescriptionRepository extends CapturingTemplateVariableDescriptionRepository {
+        @Override
+        public int insert(TemplateVariableDescription description) {
+            return 0;
         }
     }
 

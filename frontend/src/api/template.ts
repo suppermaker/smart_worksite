@@ -1,4 +1,5 @@
 import request from '../utils/request';
+import type { AxiosResponse } from 'axios';
 import type { ID, PageQuery, PageResult, ReviewTemplate } from './types';
 
 export type TemplateItem = ReviewTemplate & {
@@ -32,6 +33,17 @@ export interface TemplateUploadRequest {
   description?: string;
 }
 
+export interface TemplatePreviewFile {
+  blob: Blob;
+  fileName: string;
+  contentType: string;
+}
+
+export interface TemplateVariableDescription {
+  variableName: string;
+  description: string;
+}
+
 function cleanParams(params: TemplateQuery) {
   return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== '' && value !== undefined && value !== null));
 }
@@ -57,6 +69,37 @@ export async function fetchTemplates(params: TemplateQuery = {}) {
 
 export function fetchTemplateDetail(templateId: ID) {
   return request.get<TemplateItem>(`/templates/${templateId}`);
+}
+
+export async function fetchTemplatePreview(templateId: ID): Promise<TemplatePreviewFile> {
+  const response = await request.request<Blob, AxiosResponse<Blob>>({
+    url: `/templates/${templateId}/preview`,
+    method: 'GET',
+    responseType: 'blob',
+    transformResponse: [(data) => data]
+  });
+  const contentDisposition = String(response.headers['content-disposition'] || '');
+  const utf8Name = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const normalName = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1];
+  let fileName = `template-${templateId}`;
+  try {
+    fileName = decodeURIComponent(utf8Name || normalName || fileName);
+  } catch {
+    fileName = utf8Name || normalName || fileName;
+  }
+  return {
+    blob: response.data,
+    fileName,
+    contentType: String(response.headers['content-type'] || response.data.type || 'application/octet-stream')
+  };
+}
+
+export function fetchTemplateVariableDescriptions(templateId: ID) {
+  return request.get<TemplateVariableDescription[]>(`/templates/${templateId}/variables/descriptions`);
+}
+
+export function updateTemplateVariableDescriptions(templateId: ID, variables: TemplateVariableDescription[]) {
+  return request.put<TemplateVariableDescription[]>(`/templates/${templateId}/variables/descriptions`, { variables });
 }
 
 export function fetchReviewTemplateDetail(templateId: ID) {

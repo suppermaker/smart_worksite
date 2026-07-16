@@ -176,8 +176,10 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - Do not put business decisions in controllers or MyBatis XML.
 - External service calls must define timeout, error mapping, retry/timeout policy where applicable, and call logging.
 - Template uploads must require explicit `templateName`, `templateType`, and a non-blank original filename; storage upload failures must return visible errors and must not generate default filenames or fallback template metadata.
+- Report template uploads must scan real `{{ var_xx_xx }}` placeholders before object storage upload and persist the ordered unique variable names into `template_variable_description` with an empty initial description after template/file IDs exist. Review template uploads must not run this automatic parsing path; parse or persistence failures must fail the upload visibly, roll back database writes, and clean up the uploaded object where applicable.
 - Report template variable APIs must read the persisted template file and parse real placeholders; missing files, unsupported formats, empty content, or storage read failures must fail visibly instead of returning fake empty variable lists.
 - Template create APIs must read back the persisted template before success; update, enable, disable, and delete operations must check affected rows and fail visibly on stale or missing records.
+- Template preview, `{{ var_xx_xx }}` parsing, and variable-description persistence changes must also follow `src/main/java/com/xd/smartworksite/template/AGENTS.md`.
 - File uploads must require a non-blank original filename; do not silently replace missing filenames with generic names such as `file`.
 - File upload and parse-task creation must read back persisted records before returning success; if records are not readable, fail visibly and clean up uploaded storage objects where applicable.
 - AI, RAG, OCR, Embedding, vector retrieval, and document-parsing integrations must be adapter-based; do not implement algorithm core logic in Java controllers or application services.
@@ -249,6 +251,7 @@ Request IDs are handled by `common.config.RequestIdFilter`. The response header 
 - Policy/news crawler UI may use an explicit `VITE_USE_POLICY_MOCK` switch until Java backend policy APIs exist; frontend must still never crawl external websites or call Python services directly.
 - AI results should expose traceable information where available, such as sources, confidence, raw JSON, or document references.
 - Frontend report-template upload APIs must pass explicit `templateName` and `templateType`; do not derive them from the filename or rely on backend fallback metadata.
+- Template center must display the backend `templateId` and fetch preview content only through the Java `GET /api/templates/{templateId}/preview` API. DOCX, XLSX/CSV, and text previews should be rendered locally from the returned Blob, and unsupported formats or preview failures must remain visible to users. REPORT rows must expose a template-variable dialog that loads current variable descriptions from Java, keeps variable names read-only, and submits the complete non-blank description list through the backend update API.
 
 ## Frontend UI Style
 

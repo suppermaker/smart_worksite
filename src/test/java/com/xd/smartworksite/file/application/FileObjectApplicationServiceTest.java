@@ -22,6 +22,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -73,6 +74,34 @@ class FileObjectApplicationServiceTest {
                         assertThat(ex.getMessage()).contains("uploaded file record is not readable"));
 
         assertThat(storageAdapter.deletedObjectNames).hasSize(1);
+    }
+
+    @Test
+    void openFileContentChecksExpectedOwnershipAndReturnsClosableStream() throws Exception {
+        FileObject fileObject = new FileObject();
+        fileObject.setId(20L);
+        fileObject.setProjectId(1L);
+        fileObject.setBizId(10L);
+        fileObject.setFileName("template.md");
+        fileObject.setObjectName("templates/template.md");
+        fileObject.setContentType("text/markdown");
+        fileObject.setFileSize(7L);
+        fileObject.setStatus("ACTIVE");
+        FileObjectApplicationService service = newService(
+                new SingleFileObjectRepository(fileObject),
+                new CapturingStorageAdapter()
+        );
+
+        try (InputStream inputStream = service.openFileContent(20L, 1L, 10L).getInputStream()) {
+            assertThat(inputStream.readAllBytes()).isEqualTo("content".getBytes());
+        }
+
+        assertThatThrownBy(() -> service.openFileContent(20L, 2L, 10L))
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getMessage()).contains("project mismatch"));
+        assertThatThrownBy(() -> service.openFileContent(20L, 1L, 11L))
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getMessage()).contains("business binding mismatch"));
     }
 
     private FileObjectApplicationService newService() {
@@ -136,13 +165,26 @@ class FileObjectApplicationServiceTest {
         @Override public int markDeleted(Long fileId, String status) { return 0; }
     }
 
+    private static class SingleFileObjectRepository extends EmptyFileObjectRepository {
+        private final FileObject fileObject;
+
+        private SingleFileObjectRepository(FileObject fileObject) {
+            this.fileObject = fileObject;
+        }
+
+        @Override
+        public Optional<FileObject> findById(Long fileId) {
+            return fileObject.getId().equals(fileId) ? Optional.of(fileObject) : Optional.empty();
+        }
+    }
+
     private static class CapturingStorageAdapter implements StorageAdapter {
         private final List<String> deletedObjectNames = new ArrayList<>();
 
         @Override public StorageObject upload(String objectName, InputStream inputStream, long size, String contentType) {
             return new StorageObject(objectName, "test-bucket", contentType, size);
         }
-        @Override public InputStream openObject(String objectName) { return InputStream.nullInputStream(); }
+        @Override public InputStream openObject(String objectName) { return new ByteArrayInputStream("content".getBytes()); }
         @Override public String createAccessUrl(String objectName, Duration expire) { return "http://127.0.0.1/" + objectName; }
         @Override public void delete(String objectName) { deletedObjectNames.add(objectName); }
     }

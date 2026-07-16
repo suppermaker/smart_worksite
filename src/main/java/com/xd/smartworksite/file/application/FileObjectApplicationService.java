@@ -141,6 +141,37 @@ public class FileObjectApplicationService {
         return toResponse(fileObject);
     }
 
+    public FileObjectContent openFileContent(Long fileId, Long expectedProjectId, Long expectedBizId) {
+        FileObject fileObject = findActiveFile(fileId);
+        projectAccessApplicationService.requireProjectAccess(fileObject.getProjectId());
+        if (!FileStatus.ACTIVE.name().equals(fileObject.getStatus())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "file is not active");
+        }
+        if (expectedProjectId != null && !expectedProjectId.equals(fileObject.getProjectId())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "file project mismatch");
+        }
+        if (expectedBizId != null && !expectedBizId.equals(fileObject.getBizId())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "file business binding mismatch");
+        }
+        try {
+            InputStream inputStream = storageAdapter.openObject(fileObject.getObjectName());
+            if (inputStream == null) {
+                throw new IllegalStateException("storage returned no content stream");
+            }
+            return new FileObjectContent(
+                    fileObject.getId(),
+                    fileObject.getProjectId(),
+                    fileObject.getBizId(),
+                    fileObject.getFileName(),
+                    fileObject.getContentType(),
+                    fileObject.getFileSize() == null ? 0L : fileObject.getFileSize(),
+                    inputStream
+            );
+        } catch (RuntimeException ex) {
+            throw new BusinessException(ErrorCode.EXTERNAL_SERVICE_ERROR, "open file object failed");
+        }
+    }
+
     public FileAccessUrlResponse createAccessUrl(Long fileId, String usage, Integer expireSeconds) {
         FileObject fileObject = findActiveFile(fileId);
         projectAccessApplicationService.requireProjectAccess(fileObject.getProjectId());

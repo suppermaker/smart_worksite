@@ -94,6 +94,7 @@ Python 智能算法服务
 - 文件上传、列表、详情、访问 URL、删除和项目级访问校验。
 - 文件解析任务创建、记录查询、内容查询、重试和项目级访问校验。
 - 模板上传、列表、详情、修改、启用、停用、删除和项目级访问校验。
+- 报告模板上传前自动扫描并持久化 `{{ var_xx_xx }}` 变量、模板文件流预览、变量顺序查询，以及按模板文件新增或修改全部变量描述；审查模板上传不执行变量自动解析。
 - 报告模板和审查模板兼容接口。
 - 报告创建、列表、详情、重新生成、下载 URL、版本记录、项目级访问校验和异步 Java DOCX 模板生成链路。
 - Java AI 适配层：模型调用、Agent 调用、RAG 检索/索引、数据库问答、路由、上下文准备、外部调用日志和项目级访问校验。
@@ -316,17 +317,21 @@ JWT 鉴权会回查当前用户状态；用户被停用或删除后，旧 token 
 | POST | `/api/templates/{templateId}/enable` | 启用模板 |
 | POST | `/api/templates/{templateId}/disable` | 停用模板 |
 | DELETE | `/api/templates/{templateId}` | 删除模板 |
+| GET | `/api/templates/{templateId}/preview` | 通过 Java 后端获取模板预览文件流，不暴露 MinIO 地址 |
+| GET | `/api/templates/{templateId}/variables` | 扫描 DOC、DOCX、XLS、XLSX、CSV、TXT、MD 中的 `{{ var_xx_xx }}` 变量并按首次出现顺序去重 |
+| GET | `/api/templates/{templateId}/variables/descriptions` | 按模板变量顺序查询变量名和已有描述，未配置描述返回空字符串 |
+| PUT | `/api/templates/{templateId}/variables/descriptions` | 对当前模板文件的全部变量描述执行新增或修改 |
 | POST | `/api/templates/report` | 上传报告模板 |
 | POST | `/api/templates/review` | 上传审查模板 |
 | POST | `/api/report/templates` | 上传报告模板兼容接口 |
 | GET | `/api/report/templates` | 查询报告模板列表 |
-| GET | `/api/report/templates/{templateId}/variables` | 查询报告模板变量；后端会读取已上传模板文件并解析 `${变量名}` 和 `{{变量名}}` 占位符，不支持或读取失败时直接返回错误 |
+| GET | `/api/report/templates/{templateId}/variables` | 报告模板变量兼容接口，委托统一 `{{ var_xx_xx }}` 解析能力 |
 | POST | `/api/review/templates` | 上传审查模板兼容接口 |
 | GET | `/api/review/templates` | 查询审查模板列表 |
 
-报告模板变量解析规则：变量接口必须读取模板文件真实内容，当前支持 DOCX、TXT、MD 中的 `${变量名}` 和 `{{变量名}}` 占位符；模板文件缺失、跨项目不一致、文件为空、格式不支持或对象存储读取失败时直接返回错误，不允许返回假空列表。
+模板变量解析规则：变量接口必须读取模板文件真实内容，只识别 `{{ var_xx_xx }}` 占位符，当前支持 DOC、DOCX、XLS、XLSX、CSV、TXT、MD，不支持 PDF；合法模板没有变量时返回空列表，模板文件缺失、跨项目不一致、格式损坏、格式不支持或对象存储读取失败时直接返回错误，不允许用空列表隐藏解析失败。
 
-模板写入规则：模板上传创建后必须读回持久化记录再返回成功；模板修改、启用、停用和删除必须检查数据库影响行数，记录不存在或状态已变化时直接返回冲突错误，不允许静默成功。
+模板写入规则：报告模板上传在写入 MinIO 前自动扫描真实文件变量，并在文件、模板记录生成 ID 后将变量以空描述写入 `template_variable_description`；解析或变量持久化失败时上传失败，数据库写入回滚并清理本次 MinIO 对象。审查模板不执行自动变量解析。模板上传创建后必须读回持久化记录再返回成功；模板修改、启用、停用和删除必须检查数据库影响行数，记录不存在或状态已变化时直接返回冲突错误，不允许静默成功。
 
 ### 报告
 

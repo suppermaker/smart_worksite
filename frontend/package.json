@@ -11,8 +11,10 @@
   "dependencies": {
     "@element-plus/icons-vue": "latest",
     "axios": "latest",
+    "docx-preview": "^0.4.0",
     "element-plus": "latest",
     "pinia": "latest",
+    "read-excel-file": "^9.3.1",
     "vue": "latest",
     "vue-router": "latest"
   },
